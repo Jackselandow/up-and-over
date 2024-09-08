@@ -26,11 +26,14 @@ def run():
             run()
         win.fill('white')
         game.check_scroll_need()
-        game.platforms_group.draw(win)
+        game.draw_grid(win)
+        if not key_pressed[pg.K_q]:
+            game.platforms_group.draw(win)
         game.player.update()
         game.player.show()
         output(f'player.vel: {game.player.vel}', 1)
         output(f'charges: {game.player.charges}', 2)
+        output(f'altitude: {game.player.altitude}', 3)
         pg.display.update()
 
 

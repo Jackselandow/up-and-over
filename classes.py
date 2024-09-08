@@ -1,4 +1,5 @@
 import pygame as pg
+import random
 pg.init()
 
 win_rect = pg.Rect((0, 0), (1000, 800))
@@ -7,22 +8,67 @@ FRICTION = 0.1
 
 
 class Game:
+    tile_size = (20, 20)
 
     def __init__(self):
         # self.bg = pg.transform.scale(pg.image.load(f'resources/cover.jpg'), (1000, 800)).convert()
-        ground_platform = Platform([0, win_rect.bottom - 50], [win_rect.width, 50])
-        platform1 = Platform([600, 600], [200, 20])
-        platform2 = Platform([400, 400], [200, 20])
-        platform3 = Platform([200, 200], [200, 20])
-        platform4 = Platform([0, 0], [200, 20])
-        platform5 = Platform([300, -200], [200, 20])
-        platform6 = Platform([800, -400], [200, 20])
-        platform7 = Platform([400, -600], [200, 20])
-        platform8 = Platform([500, -800], [200, 20])
-        self.platforms_group = pg.sprite.Group(ground_platform, platform1, platform2, platform3, platform4, platform5, platform6, platform7, platform8)
+        self.tiles_group = pg.sprite.Group()
+        self.ground = Platform([0, win_rect.bottom - 50], [win_rect.width, 50])
+        self.platforms_group = pg.sprite.Group(self.ground)
+        # platform1 = Platform([600, 600], [200, 20])
+        # platform2 = Platform([400, 400], [200, 20])
+        # platform3 = Platform([200, 200], [200, 20])
+        # platform4 = Platform([0, 0], [200, 20])
+        # platform5 = Platform([300, -200], [200, 20])
+        # platform6 = Platform([800, -400], [200, 20])
+        # platform7 = Platform([400, -600], [200, 20])
+        # platform8 = Platform([500, -800], [200, 20])
         self.player = Player(self)
-        self.all_sprites_group = pg.sprite.Group(self.platforms_group, self.player)
+        self.all_sprites_group = pg.sprite.Group(self.tiles_group, self.platforms_group, self.player)
+        self.update_tiles()
         self.lowest_ordinate = win_rect.bottom
+
+    def update_tiles(self):
+        if len(self.tiles_group) == 0:
+            highest_row_ordinate = win_rect.bottom
+        else:
+            last_tile = self.tiles_group.sprites()[-1]
+            highest_row_ordinate = last_tile.pos[1]
+        tilesless_gap = highest_row_ordinate - -win_rect.bottom
+        fitting_rows = int(tilesless_gap / self.tile_size[1])
+        for backward_row_num in range(fitting_rows):
+            backward_row_num += 1
+            tile_y = highest_row_ordinate - backward_row_num * self.tile_size[1]
+            tiles_row = []
+            for col_num in range(int(win_rect.width / self.tile_size[0])):
+                new_tile = Tile([col_num * self.tile_size[0], tile_y], self.tile_size)
+                self.tiles_group.add(new_tile)
+                self.all_sprites_group.add(new_tile)
+                tiles_row.append(new_tile)
+            self.generate_platforms_row(tiles_row)
+
+    def draw_grid(self, win):
+        for tile in self.tiles_group:
+            pg.draw.circle(win, 'gray70', tile.pos, 1)
+            if tile.content:
+                pg.draw.rect(win, 'red', tile.rect)
+
+        # for col_num in range(int(win_size[0] / self.tile_size[0]) + 1):
+        #     pg.draw.line(win, 'gray70', (self.tile_size[0] * col_num, 0), (self.tile_size[0] * col_num, win_size[1]))
+        # for line_num in range(int(win_size[1] / self.tile_size[1]) + 1):
+        #     pg.draw.line(win, 'gray70', (0, self.tile_size[1] * line_num), (win_size[0], self.tile_size[1] * line_num))
+
+    def generate_platforms_row(self, tiles_row):
+        platform_size = [200, 20]
+        for tile in tiles_row:
+            if not tile.content and tile.pos[0] + platform_size[0] < win_rect.right and tile.pos[1] + platform_size[1] < self.ground.pos[1] - 100:
+                new_platform = Platform(list(tile.rect.topleft), platform_size)
+                if random.random() < 0.005:
+                    self.platforms_group.add(new_platform)
+                    self.all_sprites_group.add(new_platform)
+                    occupied_tiles = pg.sprite.spritecollide(new_platform, self.tiles_group, False)
+                    for occ_tile in occupied_tiles:
+                        occ_tile.content = 'platform'
 
     def check_scroll_need(self):
         if self.player.rect.top < win_rect.bottom / 5:
@@ -39,6 +85,25 @@ class Game:
             self.lowest_ordinate += scroll_step
             for sprite in self.all_sprites_group:
                 sprite.scroll(scroll_step)
+            if self.ground not in self.all_sprites_group:
+                self.ground.scroll(scroll_step)
+            self.update_tiles()
+
+
+class Tile(pg.sprite.Sprite):
+
+    def __init__(self, pos, size):
+        super().__init__()
+        self.pos = pos
+        self.size = size
+        self.content = None
+        self.rect = pg.Rect(self.pos, self.size)
+
+    def scroll(self, value):
+        self.pos[1] += value
+        self.rect.y = round(self.pos[1])
+        if self.rect.top > win_rect.bottom:
+            self.kill()
 
 
 class Player(pg.sprite.Sprite):
@@ -56,8 +121,8 @@ class Player(pg.sprite.Sprite):
         self.vel = pg.Vector2(0, 0)
         self.retention = 0.8  # determines how many percent of the initial velocity will be saved after a bounce
         self.mass = 1
+        self.altitude = 0
         self.bounce_lim = 3  # lowest speed limit, after reaching which the player won't bounce anymore
-        self.is_jumping = False
         self.ray_len = 300
         # self.pull_lim = 300
         # self.push_lim = 150
@@ -73,6 +138,7 @@ class Player(pg.sprite.Sprite):
         self.rect.centerx, self.rect.centery = round(self.pos[0]), round(self.pos[1])
         self.check_bounds_collision()
         self.check_platform_collision()
+        self.altitude = int((self.game.ground.pos[1] - self.rect.top) / 50)
 
     def cast_ray(self):
         mouse_pos = pg.Vector2(pg.mouse.get_pos())
@@ -109,8 +175,6 @@ class Player(pg.sprite.Sprite):
         self.charges -= 1
         delta_vel = max(15 * coefficient, 5) * ray_dir
         self.vel += delta_vel
-        if self.is_jumping is False and delta_vel[1] != 0:
-            self.is_jumping = True
 
     def apply_external_forces(self):
         if abs(self.vel[0]) > FRICTION:
@@ -120,8 +184,10 @@ class Player(pg.sprite.Sprite):
                 self.vel[0] += FRICTION * self.mass
         else:
             self.vel[0] = 0
-        if self.is_jumping is True:
+        self.rect.bottom += 1
+        if not pg.sprite.spritecollideany(self, self.game.platforms_group):
             self.vel += GRAVITY * self.mass
+        self.rect.bottom -= 1
 
     def check_bounds_collision(self):
         if self.rect.left < 0:
@@ -134,17 +200,16 @@ class Player(pg.sprite.Sprite):
             self.vel[0] = -abs(self.vel[0]) * self.retention
 
     def check_platform_collision(self):
-        hit_platform = pg.sprite.spritecollideany(self, self.game.platforms_group)
-        if hit_platform:
+        hit_platforms = pg.sprite.spritecollide(self, self.game.platforms_group, False)
+        for hit_platform in hit_platforms:
             if self.vel[1] > 0 and self.prerect.bottom <= hit_platform.rect.top:
                 self.rect.bottom = hit_platform.rect.top
                 self.pos[1] = self.rect.centery
-                self.charges = 2
+                self.charges = 200
                 if self.vel[1] > self.bounce_lim:
                     self.vel[1] = -self.vel[1] * self.retention
                 else:
                     self.vel[1] = 0
-                    self.is_jumping = False
                 low_ordinate = hit_platform.rect.top + 100
                 if low_ordinate < self.game.lowest_ordinate:
                     self.game.lowest_ordinate = low_ordinate
@@ -155,11 +220,11 @@ class Player(pg.sprite.Sprite):
             if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left:
                 self.rect.right = hit_platform.rect.left
                 self.pos[0] = self.rect.centerx
-                self.vel[0] = -self.vel[0] * self.retention
+                self.vel[0] = -abs(self.vel[0]) * self.retention
             elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right:
                 self.rect.left = hit_platform.rect.right
                 self.pos[0] = self.rect.centerx
-                self.vel[0] = -self.vel[0] * self.retention
+                self.vel[0] = abs(self.vel[0]) * self.retention
 
     def scroll(self, value):
         self.pos[1] += value
@@ -183,4 +248,4 @@ class Platform(pg.sprite.Sprite):
         self.rect.y = round(self.pos[1])
         if self.rect.top > win_rect.bottom:
             self.kill()
-            del self
+            # del self
