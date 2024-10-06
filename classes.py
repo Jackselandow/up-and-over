@@ -4,7 +4,7 @@ pg.init()
 
 win_rect = pg.Rect((0, 0), (1000, 800))
 GRAVITY = pg.Vector2(0, 0.5)
-FRICTION = 0.1
+DRAG = 0.01
 
 
 class Game:
@@ -13,7 +13,7 @@ class Game:
     def __init__(self):
         # self.bg = pg.transform.scale(pg.image.load(f'resources/cover.jpg'), (1000, 800)).convert()
         self.tiles_group = pg.sprite.Group()
-        self.ground = Platform([0, win_rect.bottom - 50], [win_rect.width, 50])
+        self.ground = Platform([0, win_rect.bottom - 100], [win_rect.width, 100])
         self.platforms_group = pg.sprite.Group(self.ground)
         # platform1 = Platform([600, 600], [200, 20])
         # platform2 = Platform([400, 400], [200, 20])
@@ -77,7 +77,7 @@ class Game:
                 self.lowest_ordinate = low_ordinate
 
         offset = win_rect.bottom - self.lowest_ordinate
-        if offset != 0:
+        if offset > 0:
             if offset > 5:
                 scroll_step = 5
             else:
@@ -112,26 +112,35 @@ class Player(pg.sprite.Sprite):
         super().__init__()
         self.game = game
         self.win = pg.display.get_surface()
-        self.pos = pg.Vector2(320, 730)  # position of player's center represented as a vector
+        self.pos = pg.Vector2(320, 650)  # position of player's center represented as a vector
         self.size = [40, 40]
         self.image = pg.transform.scale(pg.image.load(f'resources/player.png'), self.size).convert_alpha()
         self.rect = pg.Rect((0, 0), self.size)
         self.rect.center = self.pos
-        self.prerect = self.rect.copy()
+        self.prerect = self.rect.copy()  # represents the rect on the last frame
         self.vel = pg.Vector2(0, 0)
-        self.retention = 0.8  # determines how many percent of the initial velocity will be saved after a bounce
-        self.mass = 1
+        self.retention = 0.9  # determines how many percent of the initial velocity will be saved after a bounce
+        self.friction = 0.1
         self.altitude = 0
         self.bounce_lim = 3  # lowest speed limit, after reaching which the player won't bounce anymore
-        self.ray_len = 300
-        # self.pull_lim = 300
-        # self.push_lim = 150
-        self.charges = 2
-        self.cooldown = True
+        self.accumulating = False
+        self.energy = 0
 
     def update(self):
-        intersect_point, dist_to_point, ray_dir = self.cast_ray()
-        self.check_pull_push(intersect_point, dist_to_point, ray_dir)
+        mouse_pressed = pg.mouse.get_pressed()
+        if mouse_pressed[0]:
+            if self.accumulating is False:
+                self.accumulating = True
+                self.retention = 0.6
+                self.friction = 0.2
+                self.image.fill('blue')
+            self.cast_ray()
+        elif self.accumulating is True:
+            self.accumulating = False
+            self.retention = 0.9
+            self.friction = 0.1
+            self.image.fill('red')
+            self.release_energy()
         self.apply_external_forces()
         self.pos += self.vel
         self.prerect = self.rect.copy()
@@ -142,61 +151,44 @@ class Player(pg.sprite.Sprite):
 
     def cast_ray(self):
         mouse_pos = pg.Vector2(pg.mouse.get_pos())
-        ray_dir = (mouse_pos - self.pos).normalize()
-        ray_end = self.pos + ray_dir * self.ray_len
-        pg.draw.line(self.win, 'green', self.rect.center, ray_end)
-        closest_point = None
-        closest_distance = float('inf')
-        for platform in self.game.platforms_group:
-            intersected_ray = platform.rect.clipline(self.pos, ray_end)
-            if intersected_ray:
-                entry_pont = pg.Vector2(intersected_ray[0])
-                distance = self.pos.distance_to(entry_pont)
-                if distance < closest_distance:
-                    closest_distance = distance
-                    closest_point = entry_pont
-        return closest_point, closest_distance, ray_dir
+        if mouse_pos != self.pos:
+            mouse_dir = (mouse_pos - self.pos).normalize()
+            ray_end = self.pos + mouse_dir * self.energy * 5
+            pg.draw.line(self.win, 'green', self.rect.center, ray_end, 3)
+            return mouse_dir
 
-    def check_pull_push(self, intersect_point, dist_to_point, ray_dir):
-        mouse_pressed = pg.mouse.get_pressed()
-        if intersect_point and self.charges > 0 and self.cooldown is True:
-            pg.draw.circle(self.win, 'red', intersect_point, 5)
-            if mouse_pressed[0]:
-                point_to_rayend_ratio = dist_to_point / self.ray_len
-                self.perform_pull_push(point_to_rayend_ratio, ray_dir)
-            if mouse_pressed[2]:
-                point_to_raystart_ratio = (self.ray_len - dist_to_point) / self.ray_len
-                self.perform_pull_push(point_to_raystart_ratio, -ray_dir)
-        elif not mouse_pressed[0] and not mouse_pressed[2]:
-            self.cooldown = True
-
-    def perform_pull_push(self, coefficient, ray_dir):
-        self.cooldown = False
-        self.charges -= 1
-        delta_vel = max(15 * coefficient, 5) * ray_dir
-        self.vel += delta_vel
+    def release_energy(self):
+        mouse_dir = self.cast_ray()
+        self.vel += -mouse_dir * min(30, self.energy)
+        self.energy = 0
 
     def apply_external_forces(self):
-        if abs(self.vel[0]) > FRICTION:
-            if self.vel[0] > 0:
-                self.vel[0] -= FRICTION * self.mass
-            elif self.vel[0] < 0:
-                self.vel[0] += FRICTION * self.mass
-        else:
-            self.vel[0] = 0
+        self.vel -= DRAG * self.vel
         self.rect.bottom += 1
-        if not pg.sprite.spritecollideany(self, self.game.platforms_group):
-            self.vel += GRAVITY * self.mass
+        is_on_surface = pg.sprite.spritecollideany(self, self.game.platforms_group)
         self.rect.bottom -= 1
+        if is_on_surface:
+            if self.vel[0] > 0:
+                self.vel[0] = max(0, self.vel[0] - self.friction)
+            elif self.vel[0] < 0:
+                self.vel[0] = min(self.vel[0] + self.friction, 0)
+            if self.accumulating and self.vel[0] != 0:
+                self.energy += self.friction
+        else:
+            self.vel += GRAVITY
 
     def check_bounds_collision(self):
         if self.rect.left < 0:
             self.rect.left = 0
             self.pos[0] = self.rect.centerx
+            if self.accumulating is True:
+                self.energy += abs(self.vel[0])
             self.vel[0] = abs(self.vel[0]) * self.retention
         elif self.rect.right > win_rect.right:
             self.rect.right = win_rect.right
             self.pos[0] = self.rect.centerx
+            if self.accumulating is True:
+                self.energy += self.vel[0]
             self.vel[0] = -abs(self.vel[0]) * self.retention
 
     def check_platform_collision(self):
@@ -205,25 +197,32 @@ class Player(pg.sprite.Sprite):
             if self.vel[1] > 0 and self.prerect.bottom <= hit_platform.rect.top:
                 self.rect.bottom = hit_platform.rect.top
                 self.pos[1] = self.rect.centery
-                self.charges = 200
-                if self.vel[1] > self.bounce_lim:
-                    self.vel[1] = -self.vel[1] * self.retention
+                if self.accumulating is True:
+                    self.energy += self.vel[1]
+                    if self.vel[1] > self.bounce_lim:
+                        self.vel[1] = -abs(self.vel[1]) * self.retention
+                    else:
+                        self.vel[1] = 0
                 else:
-                    self.vel[1] = 0
-                low_ordinate = hit_platform.rect.top + 100
-                if low_ordinate < self.game.lowest_ordinate:
-                    self.game.lowest_ordinate = low_ordinate
+                    self.vel[1] = min(-10, -abs(self.vel[1]) * self.retention)
+                self.game.lowest_ordinate = hit_platform.rect.top + 100
             elif self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom:
                 self.rect.top = hit_platform.rect.bottom
                 self.pos[1] = self.rect.centery
-                self.vel[1] = -self.vel[1] * self.retention
+                if self.accumulating is True:
+                    self.energy += abs(self.vel[1])
+                self.vel[1] = abs(self.vel[1]) * self.retention
             if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left:
                 self.rect.right = hit_platform.rect.left
                 self.pos[0] = self.rect.centerx
+                if self.accumulating is True:
+                    self.energy += self.vel[0]
                 self.vel[0] = -abs(self.vel[0]) * self.retention
             elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right:
                 self.rect.left = hit_platform.rect.right
                 self.pos[0] = self.rect.centerx
+                if self.accumulating is True:
+                    self.energy += abs(self.vel[0])
                 self.vel[0] = abs(self.vel[0]) * self.retention
 
     def scroll(self, value):
@@ -246,6 +245,6 @@ class Platform(pg.sprite.Sprite):
     def scroll(self, value):
         self.pos[1] += value
         self.rect.y = round(self.pos[1])
-        if self.rect.top > win_rect.bottom:
+        if self.rect.top >= win_rect.bottom:
             self.kill()
             # del self

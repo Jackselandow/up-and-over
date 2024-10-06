@@ -32,8 +32,8 @@ def run():
         game.player.update()
         game.player.show()
         output(f'player.vel: {game.player.vel}', 1)
-        output(f'charges: {game.player.charges}', 2)
-        output(f'altitude: {game.player.altitude}', 3)
+        output(f'altitude: {game.player.altitude}', 2)
+        output(f'energy: {game.player.energy}', 3)
         pg.display.update()
 
 
