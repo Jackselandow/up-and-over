@@ -31,6 +31,13 @@ def run():
             game.platforms_group.draw(win)
         game.player.update()
         game.player.show()
+        # mouse_pos = pg.mouse.get_pos()
+        # for tile in game.tiles_group:
+        #     if tile.rect.collidepoint(mouse_pos):
+        #         output(tile.id, 4)
+        # for platform in game.platforms_group:
+        #     if platform.rect.collidepoint(mouse_pos):
+        #         output(platform.occupied_tiles, 5)
         output(f'player.vel: {game.player.vel}', 1)
         output(f'altitude: {game.player.altitude}', 2)
         output(f'energy: {game.player.energy}', 3)

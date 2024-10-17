@@ -12,9 +12,6 @@ class Game:
 
     def __init__(self):
         # self.bg = pg.transform.scale(pg.image.load(f'resources/cover.jpg'), (1000, 800)).convert()
-        self.tiles_group = pg.sprite.Group()
-        self.ground = Platform([0, win_rect.bottom - 100], [win_rect.width, 100])
-        self.platforms_group = pg.sprite.Group(self.ground)
         # platform1 = Platform([600, 600], [200, 20])
         # platform2 = Platform([400, 400], [200, 20])
         # platform3 = Platform([200, 200], [200, 20])
@@ -23,29 +20,11 @@ class Game:
         # platform6 = Platform([800, -400], [200, 20])
         # platform7 = Platform([400, -600], [200, 20])
         # platform8 = Platform([500, -800], [200, 20])
+        self.generator = Generator()
+        self.tiles_group, self.ground, self.platforms_group, self.all_sprites_group = self.generator.create_sprite_groups()
         self.player = Player(self)
-        self.all_sprites_group = pg.sprite.Group(self.tiles_group, self.platforms_group, self.player)
-        self.update_tiles()
+        self.player.add(self.all_sprites_group)
         self.lowest_ordinate = win_rect.bottom
-
-    def update_tiles(self):
-        if len(self.tiles_group) == 0:
-            highest_row_ordinate = win_rect.bottom
-        else:
-            last_tile = self.tiles_group.sprites()[-1]
-            highest_row_ordinate = last_tile.pos[1]
-        tilesless_gap = highest_row_ordinate - -win_rect.bottom
-        fitting_rows = int(tilesless_gap / self.tile_size[1])
-        for backward_row_num in range(fitting_rows):
-            backward_row_num += 1
-            tile_y = highest_row_ordinate - backward_row_num * self.tile_size[1]
-            tiles_row = []
-            for col_num in range(int(win_rect.width / self.tile_size[0])):
-                new_tile = Tile([col_num * self.tile_size[0], tile_y], self.tile_size)
-                self.tiles_group.add(new_tile)
-                self.all_sprites_group.add(new_tile)
-                tiles_row.append(new_tile)
-            self.generate_platforms_row(tiles_row)
 
     def draw_grid(self, win):
         for tile in self.tiles_group:
@@ -53,29 +32,12 @@ class Game:
             if tile.content:
                 pg.draw.rect(win, 'red', tile.rect)
 
-        # for col_num in range(int(win_size[0] / self.tile_size[0]) + 1):
-        #     pg.draw.line(win, 'gray70', (self.tile_size[0] * col_num, 0), (self.tile_size[0] * col_num, win_size[1]))
-        # for line_num in range(int(win_size[1] / self.tile_size[1]) + 1):
-        #     pg.draw.line(win, 'gray70', (0, self.tile_size[1] * line_num), (win_size[0], self.tile_size[1] * line_num))
-
-    def generate_platforms_row(self, tiles_row):
-        platform_size = [200, 20]
-        for tile in tiles_row:
-            if not tile.content and tile.pos[0] + platform_size[0] < win_rect.right and tile.pos[1] + platform_size[1] < self.ground.pos[1] - 100:
-                new_platform = Platform(list(tile.rect.topleft), platform_size)
-                if random.random() < 0.005:
-                    self.platforms_group.add(new_platform)
-                    self.all_sprites_group.add(new_platform)
-                    occupied_tiles = pg.sprite.spritecollide(new_platform, self.tiles_group, False)
-                    for occ_tile in occupied_tiles:
-                        occ_tile.content = 'platform'
+        # for col_num in range(int(win_rect.width / self.tile_size[0]) + 1):
+        #     pg.draw.line(win, 'gray70', (self.tile_size[0] * col_num, 0), (self.tile_size[0] * col_num, win_rect.bottom))
+        # for line_num in range(int(win_rect.height / self.tile_size[1]) + 1):
+        #     pg.draw.line(win, 'gray70', (0, self.tile_size[1] * line_num), (win_rect.right, self.tile_size[1] * line_num))
 
     def check_scroll_need(self):
-        if self.player.rect.top < win_rect.bottom / 5:
-            low_ordinate = win_rect.bottom - (win_rect.bottom / 4 - win_rect.bottom / 5)
-            if low_ordinate < self.lowest_ordinate:
-                self.lowest_ordinate = low_ordinate
-
         offset = win_rect.bottom - self.lowest_ordinate
         if offset > 0:
             if offset > 5:
@@ -87,13 +49,98 @@ class Game:
                 sprite.scroll(scroll_step)
             if self.ground not in self.all_sprites_group:
                 self.ground.scroll(scroll_step)
-            self.update_tiles()
+            self.generator.update_tiles()
+
+
+class Generator:
+    tile_size = (20, 20)
+    rightmost_tile_id = int(win_rect.width / tile_size[0]) - 1
+    min_platform_gap = 4
+    max_platform_gap = 20
+
+    def __init__(self):
+        self.highest_platform_id = -1
+        self.tiles_group = pg.sprite.Group()
+        self.ground = Platform({'left': 0, 'top': -self.min_platform_gap, 'right': self.rightmost_tile_id, 'bottom': -self.min_platform_gap}, [0, win_rect.bottom - 100], [win_rect.width, 100])
+        self.platforms_group = pg.sprite.Group(self.ground)
+        self.all_sprites_group = pg.sprite.Group(self.tiles_group, self.platforms_group)
+        self.update_tiles()
+
+    def create_sprite_groups(self):
+        return self.tiles_group, self.ground, self.platforms_group, self.all_sprites_group
+
+    def update_tiles(self):
+        if len(self.tiles_group) == 0:
+            highest_row_ordinate = self.ground.rect.top - 200
+            tile_id = (None, -1)
+        else:
+            last_tile = self.tiles_group.sprites()[-1]
+            tile_id = last_tile.id
+            highest_row_ordinate = last_tile.pos[1]
+        tilesless_gap = highest_row_ordinate - -win_rect.bottom
+        fitting_rows = int(tilesless_gap / self.tile_size[1])
+        for backward_row_num in range(fitting_rows):
+            backward_row_num += 1
+            tile_id = (0, tile_id[1] + 1)
+            tile_y = highest_row_ordinate - backward_row_num * self.tile_size[1]
+            tile_row = []
+            for col_num in range(int(win_rect.width / self.tile_size[0])):
+                new_tile = Tile(tile_id, [col_num * self.tile_size[0], tile_y], self.tile_size)
+                tile_id = (tile_id[0] + 1, tile_id[1])
+                self.tiles_group.add(new_tile)
+                self.all_sprites_group.add(new_tile)
+                tile_row.append(new_tile)
+            self.update_platform_row(tile_row)
+
+    def update_platform_row(self, tile_row):
+        platform_size = [10, 1]  # defines how many tiles on each axis a platform covers
+        tiles_row_id = tile_row[0].id[1]
+        for tile in tile_row:
+            potentially_occupied_tiles = {'left': tile.id[0], 'top': tile.id[1], 'right': tile.id[0] + platform_size[0] - 1, 'bottom': tile.id[1] - platform_size[1] + 1}
+            if tile.content is None and self.meets_platform_requirements(potentially_occupied_tiles) is True:
+                if random.random() < 0.005:
+                    self.generate_platform(platform_size, potentially_occupied_tiles, tile, tiles_row_id)
+
+        if tiles_row_id - self.highest_platform_id > self.max_platform_gap:
+            random.shuffle(tile_row)
+            for tile in tile_row:
+                potentially_occupied_tiles = {'left': tile.id[0], 'top': tile.id[1], 'right': tile.id[0] + platform_size[0] - 1, 'bottom': tile.id[1] - platform_size[1] + 1}
+                if self.meets_platform_requirements(potentially_occupied_tiles) is True:
+                    self.generate_platform(platform_size, potentially_occupied_tiles, tile, tiles_row_id)
+                    break
+
+    def generate_platform(self, platform_size, potentially_occupied_tiles, tile, tiles_row_id):
+        new_platform = Platform(potentially_occupied_tiles, list(tile.rect.topleft), [platform_size[0] * self.tile_size[0], platform_size[1] * self.tile_size[1]])
+        occupied_tiles = pg.sprite.spritecollide(new_platform, self.tiles_group, False)
+        for occ_tile in occupied_tiles:
+            occ_tile.content = 'platform'
+        self.platforms_group.add(new_platform)
+        self.all_sprites_group.add(new_platform)
+        if tiles_row_id > self.highest_platform_id:
+            self.highest_platform_id = tiles_row_id
+
+    def meets_platform_requirements(self, occupied_tiles):
+        passed = True
+        # is within screen borders
+        if occupied_tiles['right'] <= self.rightmost_tile_id:
+            for platform in self.platforms_group:
+                if occupied_tiles['bottom'] - platform.occupied_tiles['top'] >= self.min_platform_gap:
+                    continue
+                elif occupied_tiles['left'] - platform.occupied_tiles['right'] >= self.min_platform_gap or platform.occupied_tiles['left'] - occupied_tiles['right'] >= self.min_platform_gap:
+                    continue
+                else:
+                    passed = False 
+                    break
+        else:
+            passed = False
+        return passed
 
 
 class Tile(pg.sprite.Sprite):
 
-    def __init__(self, pos, size):
+    def __init__(self, id, pos, size):
         super().__init__()
+        self.id = id
         self.pos = pos
         self.size = size
         self.content = None
@@ -102,7 +149,7 @@ class Tile(pg.sprite.Sprite):
     def scroll(self, value):
         self.pos[1] += value
         self.rect.y = round(self.pos[1])
-        if self.rect.top > win_rect.bottom:
+        if self.rect.top >= win_rect.bottom:
             self.kill()
 
 
@@ -112,7 +159,7 @@ class Player(pg.sprite.Sprite):
         super().__init__()
         self.game = game
         self.win = pg.display.get_surface()
-        self.pos = pg.Vector2(320, 650)  # position of player's center represented as a vector
+        self.pos = pg.Vector2(320, 679)  # position of player's center represented as a vector
         self.size = [40, 40]
         self.image = pg.transform.scale(pg.image.load(f'resources/player.png'), self.size).convert_alpha()
         self.rect = pg.Rect((0, 0), self.size)
@@ -235,8 +282,9 @@ class Player(pg.sprite.Sprite):
 
 class Platform(pg.sprite.Sprite):
 
-    def __init__(self, pos, size):
+    def __init__(self, occupied_tiles, pos, size):
         super().__init__()
+        self.occupied_tiles = occupied_tiles
         self.pos = pos
         self.size = size
         self.image = pg.transform.scale(pg.image.load(f'resources/platform.png'), self.size).convert_alpha()
