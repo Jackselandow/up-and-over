@@ -3,8 +3,8 @@ import random
 pg.init()
 
 win_rect = pg.Rect((0, 0), (1000, 800))
-GRAVITY = pg.Vector2(0, 0.5)
 DRAG = 0.01
+GRAVITY = 0.5
 
 
 class Game:
@@ -161,33 +161,26 @@ class Player(pg.sprite.Sprite):
         self.win = pg.display.get_surface()
         self.pos = pg.Vector2(320, 679)  # position of player's center represented as a vector
         self.size = [40, 40]
-        self.image = pg.transform.scale(pg.image.load(f'resources/player.png'), self.size).convert_alpha()
+        self.image = pg.Surface(self.size)
+        self.image.fill('red')
         self.rect = pg.Rect((0, 0), self.size)
         self.rect.center = self.pos
         self.prerect = self.rect.copy()  # represents the rect on the last frame
         self.vel = pg.Vector2(0, 0)
-        self.retention = 0.9  # determines how many percent of the initial velocity will be saved after a bounce
+        self.retention = 0.8  # determines how many percent of the initial velocity will be saved after a bounce
         self.friction = 0.1
         self.altitude = 0
         self.bounce_lim = 3  # lowest speed limit, after reaching which the player won't bounce anymore
         self.accumulating = False
-        self.energy = 0
+        self.energy = 10
+        self.min_energy = 10
+        self.max_energy = 35
+        self.overcharged = False
 
     def update(self):
-        mouse_pressed = pg.mouse.get_pressed()
-        if mouse_pressed[0]:
-            if self.accumulating is False:
-                self.accumulating = True
-                self.retention = 0.6
-                self.friction = 0.2
-                self.image.fill('blue')
-            self.cast_ray()
-        elif self.accumulating is True:
-            self.accumulating = False
-            self.retention = 0.9
-            self.friction = 0.1
-            self.image.fill('red')
-            self.release_energy()
+        self.check_energy_level()
+        if self.overcharged is False:
+            self.handle_player_control()
         self.apply_external_forces()
         self.pos += self.vel
         self.prerect = self.rect.copy()
@@ -195,6 +188,37 @@ class Player(pg.sprite.Sprite):
         self.check_bounds_collision()
         self.check_platform_collision()
         self.altitude = int((self.game.ground.pos[1] - self.rect.top) / 50)
+
+    def check_energy_level(self):
+        if self.energy < self.min_energy and self.vel.length() == 0:
+            self.overcharged = False
+            self.energy = min(self.min_energy, self.energy + 0.2)
+        elif self.energy > self.max_energy:
+            self.overcharged = True
+            self.turn_accumulation_off()
+            self.release_energy()
+
+    def turn_accumulation_on(self):
+        self.accumulating = True
+        self.retention = 0.5
+        self.friction = 0.3
+        self.image.fill('blue')
+
+    def turn_accumulation_off(self):
+        self.accumulating = False
+        self.retention = 0.8
+        self.friction = 0.1
+        self.image.fill('red')
+
+    def handle_player_control(self):
+        mouse_pressed = pg.mouse.get_pressed()
+        if mouse_pressed[0]:
+            if self.accumulating is False:
+                self.turn_accumulation_on()
+            self.cast_ray()
+        elif self.accumulating is True:
+            self.turn_accumulation_off()
+            self.release_energy()
 
     def cast_ray(self):
         mouse_pos = pg.Vector2(pg.mouse.get_pos())
@@ -206,7 +230,7 @@ class Player(pg.sprite.Sprite):
 
     def release_energy(self):
         mouse_dir = self.cast_ray()
-        self.vel += -mouse_dir * min(30, self.energy)
+        self.vel += -mouse_dir * self.energy
         self.energy = 0
 
     def apply_external_forces(self):
@@ -222,7 +246,7 @@ class Player(pg.sprite.Sprite):
             if self.accumulating and self.vel[0] != 0:
                 self.energy += self.friction
         else:
-            self.vel += GRAVITY
+            self.vel[1] += GRAVITY
 
     def check_bounds_collision(self):
         if self.rect.left < 0:
@@ -246,12 +270,10 @@ class Player(pg.sprite.Sprite):
                 self.pos[1] = self.rect.centery
                 if self.accumulating is True:
                     self.energy += self.vel[1]
-                    if self.vel[1] > self.bounce_lim:
-                        self.vel[1] = -abs(self.vel[1]) * self.retention
-                    else:
-                        self.vel[1] = 0
+                if self.vel[1] > self.bounce_lim:
+                    self.vel[1] = -abs(self.vel[1]) * self.retention
                 else:
-                    self.vel[1] = min(-10, -abs(self.vel[1]) * self.retention)
+                    self.vel[1] = 0
                 self.game.lowest_ordinate = hit_platform.rect.top + 100
             elif self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom:
                 self.rect.top = hit_platform.rect.bottom
