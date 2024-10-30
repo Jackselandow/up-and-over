@@ -6,7 +6,7 @@ pg.init()
 win_rect = pg.Rect((0, 0), (1000, 800))
 win = pg.display.set_mode(win_rect.size)
 pg.display.set_caption('SkyJump')
-# pg.display.set_icon(pg.image.load('resources/heart.jpg'))
+# pg.display.set_icon(pg.image.load(''))
 clock = pg.time.Clock()
 FPS = 60
 
@@ -24,11 +24,13 @@ def run():
         key_pressed = pg.key.get_pressed()
         if key_pressed[pg.K_r]:
             run()
-        win.fill('white')
+        win.fill('lightskyblue1')
         game.check_scroll_need()
-        game.draw_grid(win)
+        # game.draw_grid(win)
         if not key_pressed[pg.K_q]:
             game.platforms_group.draw(win)
+        game.energy_waves_group.update()
+        game.energy_waves_group.draw(win)
         game.player.update()
         game.player.show()
         # mouse_pos = pg.mouse.get_pos()
