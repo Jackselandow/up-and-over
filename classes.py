@@ -7,10 +7,33 @@ DRAG = 0.01
 GRAVITY = 0.5
 
 
+class Label:
+
+    def __init__(self, text, font_name, font_size, fg, bg=None, **pos):
+        self.win = pg.display.get_surface()
+        self.text = text
+        self.fg = fg
+        self.bg = bg
+        self.font = pg.font.SysFont(font_name, font_size)
+        self.surface = self.font.render(text, True, fg, bg).convert_alpha()
+        self.rect = self.surface.get_rect(**pos)
+
+    def update_text(self, new_text):
+        self.text = new_text
+        self.surface = self.font.render(self.text, True, self.fg, self.bg).convert_alpha()
+        self.rect.size = self.surface.get_size()
+
+    def scroll(self, value):
+        self.rect.y += value
+
+    def draw(self, surface):
+        surface.blit(self.surface, self.rect)
+
+
 class Game:
 
     def __init__(self):
-        # self.bg = pg.transform.scale(pg.image.load(f'resources/cover.jpg'), (1000, 800)).convert()
+        self.state = 'running'
         # platform1 = Platform([600, 600], [200, 20])
         # platform2 = Platform([400, 400], [200, 20])
         # platform3 = Platform([200, 200], [200, 20])
@@ -20,22 +43,28 @@ class Game:
         # platform7 = Platform([400, -600], [200, 20])
         # platform8 = Platform([500, -800], [200, 20])
         self.generator = Generator()
-        self.tiles_group, self.ground, self.platforms_group, self.all_sprites_group = self.generator.create_sprite_groups()
+        self.tiles_group, self.ground, self.platforms_group, self.scrollable_objects = self.generator.get_sprite_groups()
         self.player = Player(self)
         self.energy_waves_group = pg.sprite.Group()
-        self.all_sprites_group.add(self.player, self.energy_waves_group)
+        self.height = 0
+        self.best_height = 0
+        self.height_coefficient = 50  # determines how many pixels occupies one height unit
+        self.height_label = Label('Height: 0', 'Consolas', 30, 'black', topleft=(win_rect.left + 10, win_rect.top + 10))
+        self.best_height_line = pg.Rect(0, self.ground.rect.top - self.height_coefficient * self.best_height, win_rect.width, 3)
+        self.best_height_label = Label('YOUR BEST', 'Consolas', 15, 'deepskyblue4', bottomleft=(5, self.best_height_line.top - 3))
+        self.scrollable_objects.extend((self.player, self.best_height_line, self.best_height_label))
         self.lowest_ordinate = win_rect.bottom
 
-    def draw_grid(self, win):
+    def draw_grid(self, surface):
         for tile in self.tiles_group:
-            pg.draw.circle(win, 'gray70', tile.pos, 1)
+            pg.draw.circle(surface, 'gray70', tile.pos, 1)
             if tile.content:
-                pg.draw.rect(win, 'red', tile.rect)
+                pg.draw.rect(surface, 'red', tile.rect)
 
         # for col_num in range(int(win_rect.width / self.tile_size[0]) + 1):
-        #     pg.draw.line(win, 'gray70', (self.tile_size[0] * col_num, 0), (self.tile_size[0] * col_num, win_rect.bottom))
+        #     pg.draw.line(self.win, 'gray70', (self.tile_size[0] * col_num, 0), (self.tile_size[0] * col_num, win_rect.bottom))
         # for line_num in range(int(win_rect.height / self.tile_size[1]) + 1):
-        #     pg.draw.line(win, 'gray70', (0, self.tile_size[1] * line_num), (win_rect.right, self.tile_size[1] * line_num))
+        #     pg.draw.line(self.win, 'gray70', (0, self.tile_size[1] * line_num), (win_rect.right, self.tile_size[1] * line_num))
 
     def check_scroll_need(self):
         offset = win_rect.bottom - self.lowest_ordinate
@@ -45,11 +74,45 @@ class Game:
             else:
                 scroll_step = offset
             self.lowest_ordinate += scroll_step
-            for sprite in self.all_sprites_group:
-                sprite.scroll(scroll_step)
-            if self.ground not in self.all_sprites_group:
-                self.ground.scroll(scroll_step)
+            for obj in self.scrollable_objects:
+                if hasattr(obj, 'scroll'):
+                    obj.scroll(scroll_step)
+                else:
+                    obj.y += scroll_step
             self.generator.update_tiles()
+
+    def update_objects(self):
+        self.energy_waves_group.update()
+        if self.state == 'running':
+            self.player.update()
+
+    def update_height(self):
+        current_height = int((self.ground.pos[1] - self.player.rect.top) / self.height_coefficient)
+        if current_height > self.height:
+            self.height = current_height
+            self.height_label.update_text(f'Height: {self.height}')
+
+    def draw_objects(self, surface):
+        if self.best_height > 0:
+            pg.draw.rect(surface, 'deepskyblue4', self.best_height_line)
+            self.best_height_label.draw(surface)
+        self.platforms_group.draw(surface)
+        self.energy_waves_group.draw(surface)
+        self.player.draw(surface)
+        self.height_label.draw(surface)
+
+    def restart(self):
+        self.generator.restart()
+        self.tiles_group, self.ground, self.platforms_group, self.scrollable_objects = self.generator.get_sprite_groups()
+        self.player = Player(self)
+        self.energy_waves_group.empty()
+        self.scrollable_objects.extend((self.player, self.best_height_line, self.best_height_label))
+        if self.height > self.best_height:
+            self.best_height = self.height
+        self.best_height_line.top = self.ground.rect.top - self.height_coefficient * self.best_height
+        self.best_height_label.rect.bottom = self.best_height_line.top - 3
+        self.height = 0
+        self.lowest_ordinate = win_rect.bottom
 
 
 class Generator:
@@ -63,11 +126,11 @@ class Generator:
         self.tiles_group = pg.sprite.Group()
         self.ground = Platform({'left': 0, 'top': -self.min_platform_gap, 'right': self.rightmost_tile_id, 'bottom': -self.min_platform_gap}, [0, win_rect.bottom - 100], [win_rect.width, 100], 'ground')
         self.platforms_group = pg.sprite.Group(self.ground)
-        self.all_sprites_group = pg.sprite.Group(self.tiles_group, self.platforms_group)
+        self.scrollable_objects = [self.ground]
         self.update_tiles()
 
-    def create_sprite_groups(self):
-        return self.tiles_group, self.ground, self.platforms_group, self.all_sprites_group
+    def get_sprite_groups(self):
+        return self.tiles_group, self.ground, self.platforms_group, self.scrollable_objects
 
     def update_tiles(self):
         if len(self.tiles_group) == 0:
@@ -87,7 +150,8 @@ class Generator:
             for col_num in range(int(win_rect.width / self.tile_size[0])):
                 new_tile = Tile(tile_id, [col_num * self.tile_size[0], tile_y], self.tile_size)
                 tile_id = (tile_id[0] + 1, tile_id[1])
-                new_tile.add(self.tiles_group, self.all_sprites_group)
+                self.tiles_group.add(new_tile)
+                self.scrollable_objects.append(new_tile)
                 tile_row.append(new_tile)
             self.update_platform_row(tile_row)
 
@@ -113,7 +177,8 @@ class Generator:
         occupied_tiles = pg.sprite.spritecollide(new_platform, self.tiles_group, False)
         for occ_tile in occupied_tiles:
             occ_tile.content = 'platform'
-        new_platform.add(self.platforms_group, self.all_sprites_group)
+        self.platforms_group.add(new_platform)
+        self.scrollable_objects.append(new_platform)
         if tiles_row_id > self.highest_platform_id:
             self.highest_platform_id = tiles_row_id
 
@@ -132,6 +197,17 @@ class Generator:
         else:
             passed = False
         return passed
+
+    def restart(self):
+        self.highest_platform_id = -1
+        self.tiles_group.empty()
+        self.ground.pos = [0, win_rect.bottom - 100]
+        self.ground.rect.topleft = self.ground.pos
+        self.platforms_group.empty()
+        self.platforms_group.add(self.ground)
+        self.scrollable_objects.clear()
+        self.scrollable_objects.append(self.ground)
+        self.update_tiles()
 
 
 class Tile(pg.sprite.Sprite):
@@ -156,8 +232,7 @@ class Player(pg.sprite.Sprite):
     def __init__(self, game):
         super().__init__()
         self.game = game
-        self.win = pg.display.get_surface()
-        self.pos = pg.Vector2(320, 669)  # position of player's center represented as a vector
+        self.pos = pg.Vector2(500, 675)  # position of player's center represented as a vector
         self.size = [50, 50]
         self.state = 'default'
         self.body_types = {'default': pg.image.load('resources/player/body/default.png').convert_alpha(), 'accumulating': pg.image.load('resources/player/body/accumulating.png').convert_alpha(), 'overcharged': pg.image.load('resources/player/body/overcharged.png').convert_alpha()}
@@ -174,7 +249,7 @@ class Player(pg.sprite.Sprite):
         self.friction = 0.1
         self.altitude = 0
         self.bounce_lim = 3  # lowest speed limit, after reaching which the player won't bounce anymore
-        self.energy = 0
+        self.energy = 10
         self.min_energy = 10
         self.max_energy = 35
 
@@ -188,7 +263,6 @@ class Player(pg.sprite.Sprite):
         self.rect.centerx, self.rect.centery = round(self.pos[0]), round(self.pos[1])
         self.check_bounds_collision()
         self.check_platform_collision()
-        self.altitude = int((self.game.ground.pos[1] - self.rect.top) / 50)
 
     def check_energy_level(self):
         if self.energy < self.min_energy and self.vel.length() == 0:
@@ -306,7 +380,8 @@ class Player(pg.sprite.Sprite):
         elif relative_fullness > 0.7:
             wave_size = 'big'
         wave = EnergyWave(self.game, self.pos, wave_size, mouse_dir)
-        wave.add(self.game.energy_waves_group, self.game.all_sprites_group)
+        self.game.energy_waves_group.add(wave)
+        self.game.scrollable_objects.append(wave)
 
     def update_energy_level(self):
         eyeball = self.eyeball.copy()
@@ -334,9 +409,9 @@ class Player(pg.sprite.Sprite):
         self.update_energy_level()
         self.update_pupil()
 
-    def show(self):
+    def draw(self, surface):
         self.update_visuals()
-        self.win.blit(self.image, self.rect)
+        surface.blit(self.image, self.rect)
 
 
 class EnergyWave(pg.sprite.Sprite):
@@ -406,6 +481,6 @@ class Platform(pg.sprite.Sprite):
     def scroll(self, value):
         self.pos[1] += value
         self.rect.y = round(self.pos[1])
-        if self.rect.top >= win_rect.bottom:
+        if self.rect.top >= win_rect.bottom and self.type != 'ground':
             self.kill()
             # del self
