@@ -7,8 +7,9 @@ TILE_SIZE = (20, 20)
 RIGHTMOST_TILE_ID = int(win_rect.width / TILE_SIZE[0]) - 1
 MIN_PLATFORM_GAP = 4
 MAX_PLATFORM_GAP = 20
-DRAG = 0.01
-GRAVITY = 0.5
+DRAG = 0.012
+GRAVITY = 0.45
+FRICTION = 0.1
 
 
 class Label:
@@ -39,7 +40,7 @@ class Game:
     def __init__(self):
         self.state = 'booting up'
         self.tiles_group = pg.sprite.Group()
-        self.ground = Platform({'left': 0, 'top': -MIN_PLATFORM_GAP, 'right': RIGHTMOST_TILE_ID, 'bottom': -MIN_PLATFORM_GAP}, [0, win_rect.bottom - 100], [win_rect.width, 100], 'ground')
+        self.ground = Platform({'left': 0, 'top': -MIN_PLATFORM_GAP, 'right': RIGHTMOST_TILE_ID, 'bottom': -MIN_PLATFORM_GAP}, [0, win_rect.bottom - 200], [win_rect.width, 200], 'ground')
         self.platforms_group = pg.sprite.Group(self.ground)
         self.player = Player(self)
         self.energy_waves_group = pg.sprite.Group()
@@ -69,6 +70,10 @@ class Game:
                 pg.draw.line(surface, 'gray70', (0, TILE_SIZE[1] * line_num), (win_rect.right, TILE_SIZE[1] * line_num))
 
     def check_scroll_need(self):
+        top_lim_offset = 100 - self.player.rect.top
+        if top_lim_offset > 0:
+            self.lowest_ordinate = win_rect.bottom - top_lim_offset
+
         offset = win_rect.bottom - self.lowest_ordinate
         if offset > 0:
             scroll_step = min(offset, 5)
@@ -105,7 +110,7 @@ class Game:
         self.platforms_group.empty()
         self.energy_waves_group.empty()
         self.scrollable_objects.clear()
-        self.ground.pos = [0, win_rect.bottom - 100]
+        self.ground.pos = [0, win_rect.bottom - 200]
         self.ground.rect.topleft = self.ground.pos
         self.platforms_group.add(self.ground)
         self.player = Player(self)
@@ -224,7 +229,7 @@ class Player(pg.sprite.Sprite):
     def __init__(self, game):
         super().__init__()
         self.game = game
-        self.pos = pg.Vector2(500, 675)  # position of player's center represented as a vector
+        self.pos = pg.Vector2(500, 575)  # position of player's center represented as a vector
         self.size = [50, 50]
         self.state = 'default'
         self.body_types = {'default': pg.image.load('resources/player/body/default.png').convert_alpha(), 'absorbing': pg.image.load('resources/player/body/absorbing.png').convert_alpha(), 'overcharged': pg.image.load('resources/player/body/overcharged.png').convert_alpha()}
@@ -238,12 +243,11 @@ class Player(pg.sprite.Sprite):
         self.prerect = self.rect.copy()  # copy of the rect on the last frame
         self.vel = pg.Vector2(0, 0)
         self.retention = 0.75  # determines how many percent of the initial velocity will be saved after a bounce
-        self.friction = 0.1
         self.bounce_lim = 3  # lowest vertical speed limit that prevents the player from bouncing upon reaching
-        self.energy = 8
+        self.energy = 0
         self.min_energy = 8
-        self.max_energy = 30
-        self.overcharge_toleration = 10  # amount of energy above self.max_energy limit the player can tolerate and not overcharge
+        self.max_energy = 25
+        self.overcharge_toleration = 5  # amount of energy above self.max_energy limit the player can tolerate and not overcharge
 
     def update(self):
         self.check_energy_level()
@@ -260,7 +264,7 @@ class Player(pg.sprite.Sprite):
         if self.energy < self.min_energy and self.vel.length() == 0:
             if self.state == 'overcharged':
                 self.state = 'default'
-            self.energy = min(self.min_energy, self.energy + 0.2)
+            # self.energy = min(self.min_energy, self.energy + 0.2)
         elif self.energy > self.max_energy + self.overcharge_toleration:
             self.state = 'overcharged'
             self.release_energy()
@@ -270,6 +274,7 @@ class Player(pg.sprite.Sprite):
         if mouse_pressed[0]:
             if self.state == 'default':
                 self.state = 'absorbing'
+            self.energy += 0.4
         elif self.state == 'absorbing':
             self.state = 'default'
             self.release_energy()
@@ -296,11 +301,11 @@ class Player(pg.sprite.Sprite):
         self.rect.bottom -= 1
         if is_on_surface:
             if self.vel[0] > 0:
-                self.vel[0] = max(0, self.vel[0] - self.friction)
+                self.vel[0] = max(0, self.vel[0] - FRICTION)
             elif self.vel[0] < 0:
-                self.vel[0] = min(self.vel[0] + self.friction, 0)
-            if self.state == 'absorbing' and self.vel[0] != 0:
-                self.energy += self.friction
+                self.vel[0] = min(self.vel[0] + FRICTION, 0)
+            # if self.state == 'absorbing' and self.vel[0] != 0:
+            #     self.energy += self.friction
         else:
             self.vel[1] += GRAVITY
 
@@ -308,14 +313,14 @@ class Player(pg.sprite.Sprite):
         if self.rect.left < 0:
             self.rect.left = 0
             self.pos[0] = self.rect.centerx
-            if self.state == 'absorbing':
-                self.energy += abs(self.vel[0])
+            # if self.state == 'absorbing':
+            #     self.energy += abs(self.vel[0])
             self.vel[0] = abs(self.vel[0]) * self.retention
         elif self.rect.right > win_rect.right:
             self.rect.right = win_rect.right
             self.pos[0] = self.rect.centerx
-            if self.state == 'absorbing':
-                self.energy += self.vel[0]
+            # if self.state == 'absorbing':
+            #     self.energy += self.vel[0]
             self.vel[0] = -abs(self.vel[0]) * self.retention
 
     def check_platform_collision(self):
@@ -325,33 +330,33 @@ class Player(pg.sprite.Sprite):
             if self.vel[1] > 0 and self.prerect.bottom <= hit_platform.rect.top:
                 self.rect.bottom = hit_platform.rect.top
                 self.pos[1] = self.rect.centery
-                if self.state == 'absorbing':
-                    self.energy += self.vel[1]
+                # if self.state == 'absorbing':
+                #     self.energy += self.vel[1]
                 if self.vel[1] > self.bounce_lim:
                     self.vel[1] = -abs(self.vel[1]) * self.retention
                 else:
                     self.vel[1] = 0
-                self.game.lowest_ordinate = hit_platform.rect.top + 100
+                self.game.lowest_ordinate = hit_platform.rect.top + 200
             # check top side collision
             elif self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom:
                 self.rect.top = hit_platform.rect.bottom
                 self.pos[1] = self.rect.centery
-                if self.state == 'absorbing':
-                    self.energy += abs(self.vel[1])
+                # if self.state == 'absorbing':
+                #     self.energy += abs(self.vel[1])
                 self.vel[1] = abs(self.vel[1]) * self.retention
             # check right side collision
             if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left:
                 self.rect.right = hit_platform.rect.left
                 self.pos[0] = self.rect.centerx
-                if self.state == 'absorbing':
-                    self.energy += self.vel[0]
+                # if self.state == 'absorbing':
+                #     self.energy += self.vel[0]
                 self.vel[0] = -abs(self.vel[0]) * self.retention
             # check left side collision
             elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right:
                 self.rect.left = hit_platform.rect.right
                 self.pos[0] = self.rect.centerx
-                if self.state == 'absorbing':
-                    self.energy += abs(self.vel[0])
+                # if self.state == 'absorbing':
+                #     self.energy += abs(self.vel[0])
                 self.vel[0] = abs(self.vel[0]) * self.retention
 
     def scroll(self, value):

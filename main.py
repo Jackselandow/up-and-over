@@ -1,11 +1,11 @@
 import pygame as pg
 from classes import Game
-# from debug import output
+from debug import output
 pg.init()
 
 win_rect = pg.Rect((0, 0), (1000, 800))
 win = pg.display.set_mode(win_rect.size)
-pg.display.set_caption('Up and Over')
+pg.display.set_caption('Up & Over')
 pg.display.set_icon(pg.image.load('resources/icon.png'))
 
 clock = pg.time.Clock()
@@ -32,6 +32,8 @@ def run():
         # game.draw_tiles(win)
         game.draw_objects(win)
         handle_game_state()
+        # pg.draw.line(win, 'darkgreen', (0, 100), (1000, 100), 3)
+        output(f'offset: {win_rect.bottom - game.lowest_ordinate}', 2)
         pg.display.update()
 
 
