@@ -4,9 +4,9 @@ pg.init()
 
 win_rect = pg.Rect((0, 0), (1000, 800))
 TILE_SIZE = (20, 20)
-RIGHTMOST_TILE_ID = int(win_rect.width / TILE_SIZE[0]) - 1
-MIN_PLATFORM_GAP = 4
-MAX_PLATFORM_GAP = 20
+WIN_TSIZE = (int(win_rect.width / TILE_SIZE[0]), int(win_rect.height / TILE_SIZE[1]))  # (50, 40)
+GROUND_GAP = 250  # gap between the ground's top and the bottom of the first tile row
+HEIGHT_COEFFICIENT = 50  # how many pixels occupies a single height unit
 DRAG = 0.012
 GRAVITY = 0.45
 FRICTION = 0.1
@@ -28,9 +28,6 @@ class Label:
         self.surface = self.font.render(self.text, True, self.fg, self.bg).convert_alpha()
         self.rect.size = self.surface.get_size()
 
-    def scroll(self, value):
-        self.rect.y += value
-
     def draw(self, surface):
         surface.blit(self.surface, self.rect)
 
@@ -40,19 +37,20 @@ class Game:
     def __init__(self):
         self.state = 'booting up'
         self.tiles_group = pg.sprite.Group()
-        self.ground = Platform({'left': 0, 'top': -MIN_PLATFORM_GAP, 'right': RIGHTMOST_TILE_ID, 'bottom': -MIN_PLATFORM_GAP}, [0, win_rect.bottom - 200], [win_rect.width, 200], 'ground')
-        self.platforms_group = pg.sprite.Group(self.ground)
+        self.tile_map = {}  # {tile index: tile}
+        self.occupied_tiles = set()  # a set of occupied tile ids
+        self.platforms_group = pg.sprite.Group()
         self.player = Player(self)
         self.energy_waves_group = pg.sprite.Group()
+
+        self.ground_y = win_rect.bottom - 200
         self.height = 0
         self.best_height = 0
-        self.height_coefficient = 50  # determines how many pixels occupies a single height unit
         self.height_label = Label('Height: 0', 'Consolas', 30, 'black', topleft=(win_rect.left + 10, win_rect.top + 10))
-        self.best_height_line = pg.Rect(0, self.ground.rect.top - self.height_coefficient * self.best_height, win_rect.width, 3)
+        self.best_height_line = pg.Rect(0, self.ground_y - HEIGHT_COEFFICIENT * self.best_height, win_rect.width, 3)
         self.best_height_label = Label('YOUR BEST', 'Consolas', 15, 'deepskyblue4', bottomleft=(5, self.best_height_line.top - 3))
-        self.scrollable_objects = [self.ground, self.player, self.best_height_line, self.best_height_label]
-        self.generator = Generator(self.tiles_group, self.ground, self.platforms_group, self.scrollable_objects)
         self.lowest_ordinate = win_rect.bottom  # the bottom bound of the screen which the current visible screen should scroll to
+        self.handle_rendering()
 
     def draw_tiles(self, surface, grid_type=1):
         """
@@ -60,8 +58,8 @@ class Game:
         """
         if grid_type == 1:
             for tile in self.tiles_group:
-                pg.draw.circle(surface, 'gray70', tile.pos, 1)
-                if tile.content:
+                pg.draw.circle(surface, 'gray70', tile.rect.topleft, 1)
+                if tile.id in self.occupied_tiles:
                     pg.draw.rect(surface, 'red', tile.rect)
         if grid_type == 2:
             for col_num in range(int(win_rect.width / TILE_SIZE[0]) + 1):
@@ -75,15 +73,102 @@ class Game:
             self.lowest_ordinate = win_rect.bottom - top_lim_offset
 
         offset = win_rect.bottom - self.lowest_ordinate
-        if offset > 0:
-            scroll_step = min(offset, 5)
+        if abs(offset) > 0:
+            scroll_step = min(abs(offset), 5)
+            scroll_step *= offset / abs(offset)
             self.lowest_ordinate += scroll_step
-            for obj in self.scrollable_objects:
-                if hasattr(obj, 'scroll'):
-                    obj.scroll(scroll_step)
-                else:
-                    obj.y += scroll_step
-            self.generator.update_tiles()
+            self.scroll(scroll_step)
+            self.handle_rendering()
+
+    def scroll(self, step):
+        # tiles
+        for tile in self.tiles_group:
+            tile.rect.y += step
+            if tile.rect.top >= win_rect.bottom:
+                self.tile_map.pop(tile.id)
+                self.occupied_tiles.discard(tile.id)
+                tile.kill()
+        # platforms
+        for platform in self.platforms_group:
+            platform.rect.y += step
+            if platform.rect.top >= win_rect.bottom:
+                platform.kill()
+        # player
+        self.player.pos[1] += step
+        self.player.rect.centery = round(self.player.pos[1])
+        # energy waves
+        for wave in self.energy_waves_group:
+            wave.pos[1] += step
+            wave.rect.y = round(wave.pos[1])
+            if wave.rect.top >= win_rect.bottom:
+                wave.kill()
+        # height-related objects
+        self.ground_y += step
+        self.best_height_line.y += step
+        self.best_height_label.rect.y += step
+
+    def handle_rendering(self):
+        overlap_tiles = pg.sprite.spritecollide(self.player, self.tiles_group, False)
+        overlap_rows = [tile.id[1] for tile in overlap_tiles]
+        overlap_rows.append(-1)  # provides the lowest row value when no tile has been generated yet
+        tile_render_range = 60  # determines how many tiles up from the player's position should be generated
+        highest_needed_row = max(overlap_rows) + tile_render_range
+        self.render_tiles(highest_needed_row)
+        self.render_platforms(highest_needed_row)
+
+    def render_tiles(self, highest_needed_row):
+        if len(self.tiles_group) == 0:
+            highest_generated_tile = Tile((0, -1), (0, self.ground_y - GROUND_GAP))
+            highest_generated_row = -1
+        else:
+            highest_generated_tile = self.tiles_group.sprites()[-1]
+            highest_generated_row = list(self.tile_map.keys())[-1][1]
+        tile_rows_needed = highest_needed_row - highest_generated_row
+        for _ in range(tile_rows_needed):  # generate a needed number of tile rows
+            tile_row_id = highest_generated_row + 1
+            tile_row_y = highest_generated_tile.rect.y - TILE_SIZE[1]
+            for column in range(int(win_rect.width / TILE_SIZE[0])):
+                new_tile = Tile((column, tile_row_id), [column * TILE_SIZE[0], tile_row_y])
+                self.tile_map.update({new_tile.id: new_tile})
+                self.tiles_group.add(new_tile)
+            highest_generated_tile = new_tile
+            highest_generated_row += 1
+
+    def render_platforms(self, highest_generated_row):
+        if len(self.platforms_group) == 0:
+            self.generate_platform((50, 10), (win_rect.left, win_rect.bottom - 200), (0, -1), 'ground')
+            self.generate_platform((12, 2), (380, self.ground_y - GROUND_GAP - 2 * TILE_SIZE[1]), (19, 1), 'default')
+        outline_tiles = 6  # how many unoccupied tiles in all directions a new platform should have
+        max_gap_x = 20
+        min_offset_x = 3  # at least how many x ids of the last platform mustn't be occupied by a new one
+        max_offset_y = 15  # max allowed difference between the new platform's tpos[1] and the last one's
+        last_platform = self.platforms_group.sprites()[-1]
+        new_platform_tsize = (12, 2)
+        while highest_generated_row - last_platform.tpos[1] >= max_offset_y:
+            left_lim_x = max(0, last_platform.tpos[0] - max_gap_x - new_platform_tsize[0])
+            right_lim_x = min(WIN_TSIZE[0] - new_platform_tsize[0], last_platform.tpos[0] + last_platform.tsize[0] + max_gap_x)
+            x_ids = [x_id for x_id in range(left_lim_x, right_lim_x + 1)]
+            overhang_x_ids = {x_id for x_id in range(last_platform.tpos[0] + last_platform.tsize[0] - min_offset_x - new_platform_tsize[0] + 1, last_platform.tpos[0] + min_offset_x)}
+            x_ids = [x_id for x_id in x_ids if x_id not in overhang_x_ids]
+            y_ids = [y_id for y_id in range(last_platform.tpos[1], last_platform.tpos[1] + max_offset_y + 1)]
+            while True:
+                tpos = (random.choice(x_ids), random.choice(y_ids))
+                platform_outline_ids = {(x_id, y_id) for y_id in range(tpos[1], tpos[1] - new_platform_tsize[1] - outline_tiles, -1) for x_id in range(tpos[0] - outline_tiles, tpos[0] + new_platform_tsize[0] + outline_tiles)}
+                if not platform_outline_ids & self.occupied_tiles:
+                    break
+            toffset_y = tpos[1] - last_platform.tpos[1]
+            pos = (tpos[0] * TILE_SIZE[0], last_platform.rect.y - toffset_y * TILE_SIZE[1])
+            last_platform = self.generate_platform(new_platform_tsize, pos, tpos, 'default')
+
+    def generate_platform(self, platform_tsize, pos, tpos, type):
+        new_platform = Platform(pos, tpos, platform_tsize, type)
+        seized_ids = {(x_id, y_id) for y_id in range(tpos[1], tpos[1] - platform_tsize[1], -1) for x_id in range(tpos[0], tpos[0] + platform_tsize[0])}
+        self.occupied_tiles.update(seized_ids)
+        # for id_y in range(tpos[1], tpos[1] - platform_tsize[1], -1):
+        #     for id_x in range(tpos[0], tpos[0] + platform_tsize[0]):
+        #         self.tile_map[(id_x, id_y)].content = 'platform'
+        self.platforms_group.add(new_platform)
+        return new_platform
 
     def update_objects(self):
         self.energy_waves_group.update()
@@ -91,7 +176,7 @@ class Game:
             self.player.update()
 
     def update_height(self):
-        current_height = int((self.ground.pos[1] - self.player.rect.top) / self.height_coefficient)
+        current_height = int((self.ground_y - self.player.rect.top) / HEIGHT_COEFFICIENT)
         if current_height > self.height:
             self.height = current_height
             self.height_label.update_text(f'Height: {self.height}')
@@ -107,121 +192,29 @@ class Game:
 
     def restart(self):
         self.tiles_group.empty()
+        self.tile_map.clear()
+        self.occupied_tiles.clear()
         self.platforms_group.empty()
         self.energy_waves_group.empty()
-        self.scrollable_objects.clear()
-        self.ground.pos = [0, win_rect.bottom - 200]
-        self.ground.rect.topleft = self.ground.pos
-        self.platforms_group.add(self.ground)
         self.player = Player(self)
+        self.ground_y = win_rect.bottom - 200
         if self.height > self.best_height:
             self.best_height = self.height
-        self.best_height_line.top = self.ground.rect.top - self.height_coefficient * self.best_height
+        self.best_height_line.top = self.ground_y - HEIGHT_COEFFICIENT * self.best_height
         self.best_height_label.rect.bottom = self.best_height_line.top - 3
         self.height = 0
-        self.scrollable_objects.extend((self.ground, self.player, self.best_height_line, self.best_height_label))
-        self.generator.restart()
+        self.handle_rendering()
         self.lowest_ordinate = win_rect.bottom
-
-
-class Generator:
-
-    def __init__(self, tiles_group, ground, platforms_group, scrollable_objects):
-        self.highest_platform_id = -1
-        self.tiles_group = tiles_group
-        self.ground = ground
-        self.platforms_group = platforms_group
-        self.scrollable_objects = scrollable_objects
-        self.update_tiles()
-
-    def update_tiles(self):
-        if len(self.tiles_group) == 0:
-            highest_row_ordinate = self.ground.rect.top - 200
-            tile_id = (None, -1)
-        else:
-            last_tile = self.tiles_group.sprites()[-1]
-            tile_id = last_tile.id
-            highest_row_ordinate = last_tile.pos[1]
-        tilesless_gap = highest_row_ordinate - -win_rect.bottom
-        fitting_rows = int(tilesless_gap / TILE_SIZE[1])
-        for lower_row_num in range(fitting_rows):
-            lower_row_num += 1
-            tile_id = (0, tile_id[1] + 1)
-            tile_y = highest_row_ordinate - lower_row_num * TILE_SIZE[1]
-            tile_row = []
-            for col_num in range(int(win_rect.width / TILE_SIZE[0])):
-                new_tile = Tile(tile_id, [col_num * TILE_SIZE[0], tile_y], TILE_SIZE)
-                tile_id = (tile_id[0] + 1, tile_id[1])
-                self.tiles_group.add(new_tile)
-                self.scrollable_objects.append(new_tile)
-                tile_row.append(new_tile)
-            self.update_platform_row(tile_row)
-
-    def update_platform_row(self, tile_row):
-        platform_size = [10, 1]  # defines how many tiles on each axis a platform covers
-        tiles_row_id = tile_row[0].id[1]
-        for tile in tile_row:
-            potentially_occupied_tiles = {'left': tile.id[0], 'top': tile.id[1], 'right': tile.id[0] + platform_size[0] - 1, 'bottom': tile.id[1] - platform_size[1] + 1}
-            if tile.content is None and self.meets_platform_requirements(potentially_occupied_tiles) is True:
-                if random.random() < 0.005:
-                    self.generate_platform(platform_size, potentially_occupied_tiles, tile, tiles_row_id)
-
-        # if this is the farthest reachable row, it must contain at least one platform in it
-        if tiles_row_id - self.highest_platform_id > MAX_PLATFORM_GAP:
-            random.shuffle(tile_row)
-            for tile in tile_row:
-                potentially_occupied_tiles = {'left': tile.id[0], 'top': tile.id[1], 'right': tile.id[0] + platform_size[0] - 1, 'bottom': tile.id[1] - platform_size[1] + 1}
-                if self.meets_platform_requirements(potentially_occupied_tiles) is True:
-                    self.generate_platform(platform_size, potentially_occupied_tiles, tile, tiles_row_id)
-                    break
-
-    def generate_platform(self, platform_size, potentially_occupied_tiles, tile, tiles_row_id):
-        new_platform = Platform(potentially_occupied_tiles, tile.pos.copy(), [platform_size[0] * TILE_SIZE[0], platform_size[1] * TILE_SIZE[1]], 'default')
-        newly_occupied_tiles = pg.sprite.spritecollide(new_platform, self.tiles_group, False)
-        for tile in newly_occupied_tiles:
-            tile.content = 'platform'
-        self.platforms_group.add(new_platform)
-        self.scrollable_objects.append(new_platform)
-        if tiles_row_id > self.highest_platform_id:
-            self.highest_platform_id = tiles_row_id
-
-    def meets_platform_requirements(self, occupied_tiles):
-        passed = True
-        # check if a platform fits in the screen entirely
-        if occupied_tiles['right'] <= RIGHTMOST_TILE_ID:
-            # check if there is enough space between already existing platforms and potentially new platform
-            for platform in self.platforms_group:
-                if occupied_tiles['bottom'] - platform.occupied_tiles['top'] >= MIN_PLATFORM_GAP:
-                    continue
-                elif occupied_tiles['left'] - platform.occupied_tiles['right'] >= MIN_PLATFORM_GAP or platform.occupied_tiles['left'] - occupied_tiles['right'] >= MIN_PLATFORM_GAP:
-                    continue
-                else:
-                    passed = False 
-                    break
-        else:
-            passed = False
-        return passed
-
-    def restart(self):
-        self.highest_platform_id = -1
-        self.update_tiles()
 
 
 class Tile(pg.sprite.Sprite):
 
-    def __init__(self, id: tuple, pos, size):
+    def __init__(self, id: tuple, pos: list, size=TILE_SIZE):
         super().__init__()
         self.id = id  # (column number, row number)
-        self.pos = pos
         self.size = size
-        self.content = None
-        self.rect = pg.Rect(self.pos, self.size)
-
-    def scroll(self, value):
-        self.pos[1] += value
-        self.rect.y = round(self.pos[1])
-        if self.rect.top >= win_rect.bottom:
-            self.kill()
+        self.rect = pg.Rect(pos, self.size)
+        # self.content = None
 
 
 class Player(pg.sprite.Sprite):
@@ -359,10 +352,6 @@ class Player(pg.sprite.Sprite):
                 #     self.energy += abs(self.vel[0])
                 self.vel[0] = abs(self.vel[0]) * self.retention
 
-    def scroll(self, value):
-        self.pos[1] += value
-        self.rect.centery = round(self.pos[1])
-
     def produce_energy_wave(self, mouse_dir):
         relative_fullness = self.energy / self.max_energy
         if relative_fullness < 0.3:
@@ -373,7 +362,6 @@ class Player(pg.sprite.Sprite):
             wave_size = 'big'
         wave = EnergyWave(self.game, self.pos, wave_size, mouse_dir)
         self.game.energy_waves_group.add(wave)
-        self.game.scrollable_objects.append(wave)
 
     def update_energy_filling(self):
         eyeball = self.eyeball.copy()
@@ -449,31 +437,39 @@ class EnergyWave(pg.sprite.Sprite):
                 pg.sprite.spritecollide(self, self.game.platforms_group, False, pg.sprite.collide_mask)) == 0:
             self.dissipating = False
 
-    def scroll(self, value):
-        self.pos[1] += value
-        self.rect.y = round(self.pos[1])
-        if self.rect.top >= win_rect.bottom:
-            self.kill()
-
 
 class Platform(pg.sprite.Sprite):
 
-    def __init__(self, occupied_tiles, pos, size, type):
+    def __init__(self, pos, tpos: tuple, tsize: tuple, type: str):
         super().__init__()
-        self.occupied_tiles = occupied_tiles
-        self.pos = pos
-        self.size = size
+        self.tpos = tpos  # id of the most top left occupied tile
+        self.tsize = tsize  # how many tiles a platform occupies in both dimensions
+        self.size = (self.tsize[0] * TILE_SIZE[0], self.tsize[1] * TILE_SIZE[1])
+        self.rect = pg.Rect(pos, self.size)
         self.type = type
         if self.type == 'default':
-            self.image = pg.image.load('resources/platform.png').convert_alpha()
-        else:
+            # self.image = pg.image.load('resources/platform.png').convert_alpha()
+            self.image = pg.Surface(self.size).convert()
+            self.image.fill('white')
+        elif self.type == 'ground':
             self.image = pg.Surface(self.size).convert()
             self.image.fill('forestgreen')
         self.mask = pg.mask.from_surface(self.image, 0)
-        self.rect = pg.Rect(self.pos, self.size)
 
-    def scroll(self, value):
-        self.pos[1] += value
-        self.rect.y = round(self.pos[1])
-        if self.rect.top >= win_rect.bottom and self.type != 'ground':
-            self.kill()
+    # NOT A RECTANGULAR-SHAPED PLATFORM
+    # def __init__(self, occupied_tiles, type):
+    #     self.occupied_tiles = occupied_tiles
+    #     self.type = type
+    #     self.pos = [float('inf'), float('inf')]
+    #     bottomright_corner = [float('-inf'), float('-inf')]
+    #     for tile in self.occupied_tiles:
+    #         self.pos = [min(self.pos[0], tile.pos[0]), min(self.pos[1], tile.pos[1])]
+    #         bottomright_corner = [max(bottomright_corner[0], tile.rect.right), max(bottomright_corner[1], tile.rect.bottom)]
+    #     self.rect = pg.Rect(self.pos, (bottomright_corner[0] - self.pos[0], bottomright_corner[1] - self.pos[1]))
+    #     self.image = pg.Surface(self.rect.size, pg.SRCALPHA)
+    #     for tile in self.occupied_tiles:
+    #         self.image.fill('white', ((tile.pos[0] - self.pos[0], tile.pos[1] - self.pos[1]), tile.size))
+    #
+    # def draw(self, surface):
+    #     for tile in self.occupied_tiles:
+    #         surface.blit(tile.image, tile.rect)
