@@ -1,11 +1,11 @@
 import pygame as pg
 from classes import Game
-# from debug import output
+from debug import output
 pg.init()
 
 win_rect = pg.Rect((0, 0), (1000, 800))
 win = pg.display.set_mode(win_rect.size)
-pg.display.set_caption('Up and Over')
+pg.display.set_caption('Up & Over')
 pg.display.set_icon(pg.image.load('resources/icon.png'))
 
 clock = pg.time.Clock()
@@ -22,9 +22,9 @@ def run():
         for event in events:
             if event.type == pg.QUIT:
                 exit()
-        # key_pressed = pg.key.get_pressed()
-        # if key_pressed[pg.K_r]:
-        #     game.state = 'restarting'
+        key_pressed = pg.key.get_pressed()
+        if key_pressed[pg.K_r]:
+            game.state = 'restarting'
         game.check_scroll_need()
         game.update_objects()
         game.update_height()
@@ -32,6 +32,13 @@ def run():
         # game.draw_tiles(win)
         game.draw_objects(win)
         handle_game_state()
+        # mouse_pos = pg.mouse.get_pos()
+        # for tile in game.tiles_group:
+        #     if tile.rect.collidepoint(mouse_pos):
+        #         print(tile.id)
+        # pg.draw.line(win, 'darkgreen', (0, 100), (1000, 100), 3)
+        # output(f'offset: {win_rect.bottom - game.lowest_ordinate}', 2)
+        output(f'FPS: {round(clock.get_fps(), 1)}', 2)
         pg.display.update()
 
 
