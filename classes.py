@@ -41,7 +41,7 @@ class Game:
         self.occupied_tiles = set()  # a set of occupied tile ids
         self.platforms_group = pg.sprite.Group()
         self.player = Player(self)
-        self.energy_waves_group = pg.sprite.Group()
+        # self.energy_waves_group = pg.sprite.Group()
 
         self.ground_y = win_rect.bottom - 200
         self.height = 0
@@ -97,11 +97,11 @@ class Game:
         self.player.pos[1] += step
         self.player.rect.centery = round(self.player.pos[1])
         # energy waves
-        for wave in self.energy_waves_group:
-            wave.pos[1] += step
-            wave.rect.y = round(wave.pos[1])
-            if wave.rect.top >= win_rect.bottom:
-                wave.kill()
+        # for wave in self.energy_waves_group:
+        #     wave.pos[1] += step
+        #     wave.rect.y = round(wave.pos[1])
+        #     if wave.rect.top >= win_rect.bottom:
+        #         wave.kill()
         # height-related objects
         self.ground_y += step
         self.best_height_line.y += step
@@ -171,7 +171,7 @@ class Game:
         return new_platform
 
     def update_objects(self):
-        self.energy_waves_group.update()
+        # self.energy_waves_group.update()
         if self.state == 'running':
             self.player.update()
 
@@ -186,7 +186,7 @@ class Game:
             pg.draw.rect(surface, 'deepskyblue4', self.best_height_line)
             self.best_height_label.draw(surface)
         self.platforms_group.draw(surface)
-        self.energy_waves_group.draw(surface)
+        # self.energy_waves_group.draw(surface)
         self.player.draw(surface)
         self.height_label.draw(surface)
 
@@ -195,7 +195,7 @@ class Game:
         self.tile_map.clear()
         self.occupied_tiles.clear()
         self.platforms_group.empty()
-        self.energy_waves_group.empty()
+        # self.energy_waves_group.empty()
         self.player = Player(self)
         self.ground_y = win_rect.bottom - 200
         if self.height > self.best_height:
@@ -237,40 +237,43 @@ class Player(pg.sprite.Sprite):
         self.vel = pg.Vector2(0, 0)
         self.retention = 0.75  # determines how many percent of the initial velocity will be saved after a bounce
         self.bounce_lim = 3  # lowest vertical speed limit that prevents the player from bouncing upon reaching
-        self.energy = 0
-        self.min_energy = 8
-        self.max_energy = 25
-        self.overcharge_toleration = 5  # amount of energy above self.max_energy limit the player can tolerate and not overcharge
+        # self.energy = 0
+        # self.min_energy = 8
+        # self.max_energy = 25
+        # self.overcharge_toleration = 5  # amount of energy above self.max_energy limit the player can tolerate and not overcharge
+        self.frames_past_collision = 0
+        self.jump_power = 0
+        self.max_jump_power = 100
 
     def update(self):
-        self.check_energy_level()
-        if self.state != 'overcharged':
-            self.handle_player_control()
+        # self.check_energy_level()
+        # if self.state != 'overcharged':
+        self.handle_player_input()
         self.apply_external_forces()
         self.pos += self.vel
         self.prerect = self.rect.copy()
         self.rect.centerx, self.rect.centery = round(self.pos[0]), round(self.pos[1])
+        self.frames_past_collision += 1
         self.check_bounds_collision()
         self.check_platform_collision()
 
-    def check_energy_level(self):
-        if self.energy < self.min_energy and self.vel.length() == 0:
-            if self.state == 'overcharged':
-                self.state = 'default'
-            # self.energy = min(self.min_energy, self.energy + 0.2)
-        elif self.energy > self.max_energy + self.overcharge_toleration:
-            self.state = 'overcharged'
-            self.release_energy()
+    # def check_energy_level(self):
+    #     if self.energy < self.min_energy and self.vel.length() == 0:
+    #         if self.state == 'overcharged':
+    #             self.state = 'default'
+    #         # self.energy = min(self.min_energy, self.energy + 0.2)
+    #     elif self.energy > self.max_energy + self.overcharge_toleration:
+    #         self.state = 'overcharged'
+    #         self.release_energy()
 
-    def handle_player_control(self):
+    def handle_player_input(self):
         mouse_pressed = pg.mouse.get_pressed()
         if mouse_pressed[0]:
-            if self.state == 'default':
-                self.state = 'absorbing'
-            self.energy += 0.4
+            self.state = 'absorbing'
+            self.jump_power += 1.6
         elif self.state == 'absorbing':
             self.state = 'default'
-            self.release_energy()
+            self.release_jump()
 
     def get_mouse_dir(self):
         mouse_pos = pg.Vector2(pg.mouse.get_pos())
@@ -280,12 +283,15 @@ class Player(pg.sprite.Sprite):
             mouse_dir = pg.Vector2(0, 1)
         return mouse_dir
 
-    def release_energy(self):
-        if self.energy > 0:
+    def release_jump(self):
+        allowed_collision_delay = 10
+        if self.frames_past_collision <= allowed_collision_delay:
             mouse_dir = self.get_mouse_dir()
-            self.produce_energy_wave(mouse_dir)
-            self.vel += -mouse_dir * min(self.energy, self.max_energy)
-            self.energy = 0
+            # self.produce_energy_wave(mouse_dir)
+            power_to_vel_coefficient = 0.25
+            gained_vel = min(self.jump_power, self.max_jump_power) * power_to_vel_coefficient
+            self.vel += mouse_dir * gained_vel
+        self.jump_power = 0
 
     def apply_external_forces(self):
         self.vel -= DRAG * self.vel
@@ -297,23 +303,16 @@ class Player(pg.sprite.Sprite):
                 self.vel[0] = max(0, self.vel[0] - FRICTION)
             elif self.vel[0] < 0:
                 self.vel[0] = min(self.vel[0] + FRICTION, 0)
-            # if self.state == 'absorbing' and self.vel[0] != 0:
-            #     self.energy += self.friction
-        else:
-            self.vel[1] += GRAVITY
+        self.vel[1] += GRAVITY
 
     def check_bounds_collision(self):
         if self.rect.left < 0:
             self.rect.left = 0
             self.pos[0] = self.rect.centerx
-            # if self.state == 'absorbing':
-            #     self.energy += abs(self.vel[0])
             self.vel[0] = abs(self.vel[0]) * self.retention
         elif self.rect.right > win_rect.right:
             self.rect.right = win_rect.right
             self.pos[0] = self.rect.centerx
-            # if self.state == 'absorbing':
-            #     self.energy += self.vel[0]
             self.vel[0] = -abs(self.vel[0]) * self.retention
 
     def check_platform_collision(self):
@@ -321,53 +320,49 @@ class Player(pg.sprite.Sprite):
         for hit_platform in hit_platforms:
             # check bottom side collision
             if self.vel[1] > 0 and self.prerect.bottom <= hit_platform.rect.top:
+                self.frames_past_collision = 0
                 self.rect.bottom = hit_platform.rect.top
                 self.pos[1] = self.rect.centery
-                # if self.state == 'absorbing':
-                #     self.energy += self.vel[1]
-                if self.vel[1] > self.bounce_lim:
-                    self.vel[1] = -abs(self.vel[1]) * self.retention
-                else:
-                    self.vel[1] = 0
+                # if self.vel[1] > self.bounce_lim:
+                self.vel[1] = min(-abs(self.vel[1]) * self.retention, -8)
+                # else:
+                #     self.vel[1] = 0
                 self.game.lowest_ordinate = hit_platform.rect.top + 200
             # check top side collision
             elif self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom:
+                self.frames_past_collision = 0
                 self.rect.top = hit_platform.rect.bottom
                 self.pos[1] = self.rect.centery
-                # if self.state == 'absorbing':
-                #     self.energy += abs(self.vel[1])
                 self.vel[1] = abs(self.vel[1]) * self.retention
             # check right side collision
             if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left:
+                self.frames_past_collision = 0
                 self.rect.right = hit_platform.rect.left
                 self.pos[0] = self.rect.centerx
-                # if self.state == 'absorbing':
-                #     self.energy += self.vel[0]
                 self.vel[0] = -abs(self.vel[0]) * self.retention
             # check left side collision
             elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right:
+                self.frames_past_collision = 0
                 self.rect.left = hit_platform.rect.right
                 self.pos[0] = self.rect.centerx
-                # if self.state == 'absorbing':
-                #     self.energy += abs(self.vel[0])
                 self.vel[0] = abs(self.vel[0]) * self.retention
 
-    def produce_energy_wave(self, mouse_dir):
-        relative_fullness = self.energy / self.max_energy
-        if relative_fullness < 0.3:
-            wave_size = 'small'
-        elif 0.3 <= relative_fullness <= 0.7:
-            wave_size = 'medium'
-        elif relative_fullness > 0.7:
-            wave_size = 'big'
-        wave = EnergyWave(self.game, self.pos, wave_size, mouse_dir)
-        self.game.energy_waves_group.add(wave)
+    # def produce_energy_wave(self, mouse_dir):
+    #     relative_fullness = self.energy / self.max_energy
+    #     if relative_fullness < 0.3:
+    #         wave_size = 'small'
+    #     elif 0.3 <= relative_fullness <= 0.7:
+    #         wave_size = 'medium'
+    #     elif relative_fullness > 0.7:
+    #         wave_size = 'big'
+    #     wave = EnergyWave(self.game, self.pos, wave_size, mouse_dir)
+    #     self.game.energy_waves_group.add(wave)
 
     def update_energy_filling(self):
         eyeball = self.eyeball.copy()
         energy_filling = self.energy_filling.copy()
         eyeball_size = eyeball.get_size()
-        relative_fullness = self.energy / self.max_energy
+        relative_fullness = self.jump_power / self.max_jump_power
         eyeball.blit(energy_filling, (0, eyeball_size[1] - eyeball_size[1] * relative_fullness), (0, eyeball_size[1] - eyeball_size[1] * relative_fullness, eyeball_size[0], eyeball_size[1] * relative_fullness))
         self.image.blit(eyeball, (5, 5))
 
