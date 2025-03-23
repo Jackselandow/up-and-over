@@ -6,10 +6,10 @@ win_rect = pg.Rect((0, 0), (1000, 800))
 TILE_SIZE = (20, 20)
 WIN_TSIZE = (int(win_rect.width / TILE_SIZE[0]), int(win_rect.height / TILE_SIZE[1]))  # (50, 40)
 GROUND_GAP = 250  # gap between the ground's top and the bottom of the first tile row
-HEIGHT_COEFFICIENT = 50  # how many pixels occupies a single height unit
-DRAG = 0.012
-GRAVITY = 0.45
-FRICTION = 0.1
+HEIGHT_COEFFICIENT = 50  # how many pixels a single height unit occupies
+DRAG = 0.014
+GRAVITY = 0.4
+FRICTION = 0.2
 
 
 class Label:
@@ -41,16 +41,43 @@ class Game:
         self.occupied_tiles = set()  # a set of occupied tile ids
         self.platforms_group = pg.sprite.Group()
         self.player = Player(self)
-        # self.energy_waves_group = pg.sprite.Group()
 
         self.ground_y = win_rect.bottom - 200
-        self.height = 0
         self.best_height = 0
         self.height_label = Label('Height: 0', 'Consolas', 30, 'black', topleft=(win_rect.left + 10, win_rect.top + 10))
-        self.best_height_line = pg.Rect(0, self.ground_y - HEIGHT_COEFFICIENT * self.best_height, win_rect.width, 3)
+        self.best_height_line = pg.Rect(0, win_rect.bottom, win_rect.width, 3)
         self.best_height_label = Label('YOUR BEST', 'Consolas', 15, 'deepskyblue4', bottomleft=(5, self.best_height_line.top - 3))
         self.lowest_ordinate = win_rect.bottom  # the bottom bound of the screen which the current visible screen should scroll to
         self.handle_rendering()
+
+    def update_objects(self):
+        if self.state == 'running':
+            self.player.update()
+
+    def update_height(self):
+        current_height = int((self.ground_y - self.player.rect.top) / HEIGHT_COEFFICIENT)
+        self.height_label.update_text(f'Height: {current_height}')
+        if current_height > self.best_height:
+            self.best_height = current_height
+
+    def draw_objects(self, surface):
+        pg.draw.rect(surface, 'deepskyblue4', self.best_height_line)
+        self.best_height_label.draw(surface)
+        self.platforms_group.draw(surface)
+        self.player.draw(surface)
+        self.height_label.draw(surface)
+
+    def restart(self):
+        self.tiles_group.empty()
+        self.tile_map.clear()
+        self.occupied_tiles.clear()
+        self.platforms_group.empty()
+        self.player = Player(self)
+        self.ground_y = win_rect.bottom - 200
+        self.best_height_line.top = self.ground_y - HEIGHT_COEFFICIENT * self.best_height
+        self.best_height_label.rect.bottom = self.best_height_line.top - 3
+        self.handle_rendering()
+        self.lowest_ordinate = win_rect.bottom
 
     def draw_tiles(self, surface, grid_type=1):
         """
@@ -68,40 +95,36 @@ class Game:
                 pg.draw.line(surface, 'gray70', (0, TILE_SIZE[1] * line_num), (win_rect.right, TILE_SIZE[1] * line_num))
 
     def check_scroll_need(self):
+        # scroll the screen if the player is too close to the top bound
         top_lim_offset = 100 - self.player.rect.top
         if top_lim_offset > 0:
             self.lowest_ordinate = win_rect.bottom - top_lim_offset
 
         offset = win_rect.bottom - self.lowest_ordinate
-        if abs(offset) > 0:
-            scroll_step = min(abs(offset), 5)
-            scroll_step *= offset / abs(offset)
+        if offset > 0:
+            scroll_step = min(offset, 5)
             self.lowest_ordinate += scroll_step
-            self.scroll(scroll_step)
+            self.scroll_objects(scroll_step)
             self.handle_rendering()
 
-    def scroll(self, step):
+    def scroll_objects(self, step):
         # tiles
         for tile in self.tiles_group:
-            tile.rect.y += step
+            tile.pos[1] += step
+            tile.rect.y = round(tile.pos[1])
             if tile.rect.top >= win_rect.bottom:
                 self.tile_map.pop(tile.id)
                 self.occupied_tiles.discard(tile.id)
                 tile.kill()
         # platforms
         for platform in self.platforms_group:
-            platform.rect.y += step
+            platform.pos[1] += step
+            platform.rect.y = round(platform.pos[1])
             if platform.rect.top >= win_rect.bottom:
                 platform.kill()
         # player
         self.player.pos[1] += step
         self.player.rect.centery = round(self.player.pos[1])
-        # energy waves
-        # for wave in self.energy_waves_group:
-        #     wave.pos[1] += step
-        #     wave.rect.y = round(wave.pos[1])
-        #     if wave.rect.top >= win_rect.bottom:
-        #         wave.kill()
         # height-related objects
         self.ground_y += step
         self.best_height_line.y += step
@@ -136,12 +159,12 @@ class Game:
 
     def render_platforms(self, highest_generated_row):
         if len(self.platforms_group) == 0:
-            self.generate_platform((50, 10), (win_rect.left, win_rect.bottom - 200), (0, -1), 'ground')
-            self.generate_platform((12, 2), (380, self.ground_y - GROUND_GAP - 2 * TILE_SIZE[1]), (19, 1), 'default')
+            self.generate_platform((50, 10), [win_rect.left, win_rect.bottom - 200], (0, -1), 'ground')
+            self.generate_platform((12, 2), [380, self.ground_y - GROUND_GAP - 2 * TILE_SIZE[1]], (19, 1), 'default')
         outline_tiles = 6  # how many unoccupied tiles in all directions a new platform should have
-        max_gap_x = 20
-        min_offset_x = 3  # at least how many x ids of the last platform mustn't be occupied by a new one
-        max_offset_y = 15  # max allowed difference between the new platform's tpos[1] and the last one's
+        max_gap_x = 15
+        min_offset_x = 4  # at least how many x ids of the last platform mustn't be occupied by a new one
+        max_offset_y = 12  # max allowed difference between the new platform's tpos[1] and the last one's
         last_platform = self.platforms_group.sprites()[-1]
         new_platform_tsize = (12, 2)
         while highest_generated_row - last_platform.tpos[1] >= max_offset_y:
@@ -157,54 +180,15 @@ class Game:
                 if not platform_outline_ids & self.occupied_tiles:
                     break
             toffset_y = tpos[1] - last_platform.tpos[1]
-            pos = (tpos[0] * TILE_SIZE[0], last_platform.rect.y - toffset_y * TILE_SIZE[1])
+            pos = [tpos[0] * TILE_SIZE[0], last_platform.rect.y - toffset_y * TILE_SIZE[1]]
             last_platform = self.generate_platform(new_platform_tsize, pos, tpos, 'default')
 
     def generate_platform(self, platform_tsize, pos, tpos, type):
         new_platform = Platform(pos, tpos, platform_tsize, type)
         seized_ids = {(x_id, y_id) for y_id in range(tpos[1], tpos[1] - platform_tsize[1], -1) for x_id in range(tpos[0], tpos[0] + platform_tsize[0])}
         self.occupied_tiles.update(seized_ids)
-        # for id_y in range(tpos[1], tpos[1] - platform_tsize[1], -1):
-        #     for id_x in range(tpos[0], tpos[0] + platform_tsize[0]):
-        #         self.tile_map[(id_x, id_y)].content = 'platform'
         self.platforms_group.add(new_platform)
         return new_platform
-
-    def update_objects(self):
-        # self.energy_waves_group.update()
-        if self.state == 'running':
-            self.player.update()
-
-    def update_height(self):
-        current_height = int((self.ground_y - self.player.rect.top) / HEIGHT_COEFFICIENT)
-        if current_height > self.height:
-            self.height = current_height
-            self.height_label.update_text(f'Height: {self.height}')
-
-    def draw_objects(self, surface):
-        if self.best_height > 0:
-            pg.draw.rect(surface, 'deepskyblue4', self.best_height_line)
-            self.best_height_label.draw(surface)
-        self.platforms_group.draw(surface)
-        # self.energy_waves_group.draw(surface)
-        self.player.draw(surface)
-        self.height_label.draw(surface)
-
-    def restart(self):
-        self.tiles_group.empty()
-        self.tile_map.clear()
-        self.occupied_tiles.clear()
-        self.platforms_group.empty()
-        # self.energy_waves_group.empty()
-        self.player = Player(self)
-        self.ground_y = win_rect.bottom - 200
-        if self.height > self.best_height:
-            self.best_height = self.height
-        self.best_height_line.top = self.ground_y - HEIGHT_COEFFICIENT * self.best_height
-        self.best_height_label.rect.bottom = self.best_height_line.top - 3
-        self.height = 0
-        self.handle_rendering()
-        self.lowest_ordinate = win_rect.bottom
 
 
 class Tile(pg.sprite.Sprite):
@@ -212,8 +196,9 @@ class Tile(pg.sprite.Sprite):
     def __init__(self, id: tuple, pos: list, size=TILE_SIZE):
         super().__init__()
         self.id = id  # (column number, row number)
+        self.pos = pos
         self.size = size
-        self.rect = pg.Rect(pos, self.size)
+        self.rect = pg.Rect(self.pos, self.size)
         # self.content = None
 
 
@@ -225,29 +210,23 @@ class Player(pg.sprite.Sprite):
         self.pos = pg.Vector2(500, 575)  # position of player's center represented as a vector
         self.size = [50, 50]
         self.state = 'default'
-        self.body_types = {'default': pg.image.load('resources/player/body/default.png').convert_alpha(), 'absorbing': pg.image.load('resources/player/body/absorbing.png').convert_alpha(), 'overcharged': pg.image.load('resources/player/body/overcharged.png').convert_alpha()}
+        self.body_types = {'default': pg.image.load('resources/player/body/default.png').convert_alpha(), 'absorbing': pg.image.load('resources/player/body/absorbing.png').convert_alpha()}
         self.eyeball = pg.image.load('resources/player/eyeball.png').convert_alpha()
         self.energy_filling = pg.image.load('resources/player/energy_filling.png').convert_alpha()
-        self.pupil_types = {'default': pg.image.load('resources/player/pupil/default.png').convert_alpha(), 'absorbing': pg.image.load('resources/player/pupil/absorbing.png').convert_alpha(), 'overcharged': pg.image.load('resources/player/pupil/overcharged.png').convert_alpha()}
+        self.pupil_types = {'default': pg.image.load('resources/player/pupil/default.png').convert_alpha(), 'absorbing': pg.image.load('resources/player/pupil/absorbing.png').convert_alpha()}
         self.image = self.body_types[self.state].copy()
-        self.mask = pg.mask.from_surface(self.image, 0)
         self.rect = pg.Rect((0, 0), self.size)
         self.rect.center = self.pos
         self.prerect = self.rect.copy()  # copy of the rect on the last frame
         self.vel = pg.Vector2(0, 0)
-        self.retention = 0.75  # determines how many percent of the initial velocity will be saved after a bounce
+        self.retention = 0.9  # determines how many percent of the initial velocity will be saved after a bounce
         self.bounce_lim = 3  # lowest vertical speed limit that prevents the player from bouncing upon reaching
-        # self.energy = 0
-        # self.min_energy = 8
-        # self.max_energy = 25
-        # self.overcharge_toleration = 5  # amount of energy above self.max_energy limit the player can tolerate and not overcharge
         self.frames_past_collision = 0
+        self.collided_pos = pg.Vector2(0, 0)  # player's position when the last collision happened
         self.jump_power = 0
         self.max_jump_power = 100
 
     def update(self):
-        # self.check_energy_level()
-        # if self.state != 'overcharged':
         self.handle_player_input()
         self.apply_external_forces()
         self.pos += self.vel
@@ -256,15 +235,6 @@ class Player(pg.sprite.Sprite):
         self.frames_past_collision += 1
         self.check_bounds_collision()
         self.check_platform_collision()
-
-    # def check_energy_level(self):
-    #     if self.energy < self.min_energy and self.vel.length() == 0:
-    #         if self.state == 'overcharged':
-    #             self.state = 'default'
-    #         # self.energy = min(self.min_energy, self.energy + 0.2)
-    #     elif self.energy > self.max_energy + self.overcharge_toleration:
-    #         self.state = 'overcharged'
-    #         self.release_energy()
 
     def handle_player_input(self):
         mouse_pressed = pg.mouse.get_pressed()
@@ -284,11 +254,11 @@ class Player(pg.sprite.Sprite):
         return mouse_dir
 
     def release_jump(self):
-        allowed_collision_delay = 10
-        if self.frames_past_collision <= allowed_collision_delay:
+        allowed_collision_delay = 12  # after this number of frames since collision, the player can no longer jump off the collided surface
+        allowed_collision_offset = 80  # after getting this far from a collided pos, the player can no longer jump off the collided surface
+        if self.frames_past_collision <= allowed_collision_delay and self.pos.distance_to(self.collided_pos) <= allowed_collision_offset:
             mouse_dir = self.get_mouse_dir()
-            # self.produce_energy_wave(mouse_dir)
-            power_to_vel_coefficient = 0.25
+            power_to_vel_coefficient = 0.18
             gained_vel = min(self.jump_power, self.max_jump_power) * power_to_vel_coefficient
             self.vel += mouse_dir * gained_vel
         self.jump_power = 0
@@ -321,42 +291,35 @@ class Player(pg.sprite.Sprite):
             # check bottom side collision
             if self.vel[1] > 0 and self.prerect.bottom <= hit_platform.rect.top:
                 self.frames_past_collision = 0
+                self.collided_pos = self.pos.copy()
                 self.rect.bottom = hit_platform.rect.top
                 self.pos[1] = self.rect.centery
-                # if self.vel[1] > self.bounce_lim:
-                self.vel[1] = min(-abs(self.vel[1]) * self.retention, -8)
-                # else:
-                #     self.vel[1] = 0
+                if self.vel[1] > self.bounce_lim:
+                    self.vel[1] = -abs(self.vel[1]) * self.retention
+                else:
+                    self.vel[1] = 0
                 self.game.lowest_ordinate = hit_platform.rect.top + 200
             # check top side collision
             elif self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom:
                 self.frames_past_collision = 0
+                self.collided_pos = self.pos.copy()
                 self.rect.top = hit_platform.rect.bottom
                 self.pos[1] = self.rect.centery
                 self.vel[1] = abs(self.vel[1]) * self.retention
             # check right side collision
             if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left:
                 self.frames_past_collision = 0
+                self.collided_pos = self.pos.copy()
                 self.rect.right = hit_platform.rect.left
                 self.pos[0] = self.rect.centerx
                 self.vel[0] = -abs(self.vel[0]) * self.retention
             # check left side collision
             elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right:
                 self.frames_past_collision = 0
+                self.collided_pos = self.pos.copy()
                 self.rect.left = hit_platform.rect.right
                 self.pos[0] = self.rect.centerx
                 self.vel[0] = abs(self.vel[0]) * self.retention
-
-    # def produce_energy_wave(self, mouse_dir):
-    #     relative_fullness = self.energy / self.max_energy
-    #     if relative_fullness < 0.3:
-    #         wave_size = 'small'
-    #     elif 0.3 <= relative_fullness <= 0.7:
-    #         wave_size = 'medium'
-    #     elif relative_fullness > 0.7:
-    #         wave_size = 'big'
-    #     wave = EnergyWave(self.game, self.pos, wave_size, mouse_dir)
-    #     self.game.energy_waves_group.add(wave)
 
     def update_energy_filling(self):
         eyeball = self.eyeball.copy()
@@ -367,17 +330,14 @@ class Player(pg.sprite.Sprite):
         self.image.blit(eyeball, (5, 5))
 
     def update_pupil(self):
-        if self.state != 'overcharged':
-            mouse_pos = pg.Vector2(pg.mouse.get_pos())
-            if mouse_pos != self.pos:
-                vector_to_cursor = mouse_pos - self.pos
-                pupil_offset = vector_to_cursor / 5
-                pupil_offset.clamp_magnitude_ip(10)
-            else:
-                pupil_offset = [0, 0]
-            self.image.blit(self.pupil_types[self.state], (19 + pupil_offset[0], 19 + pupil_offset[1]))
+        mouse_pos = pg.Vector2(pg.mouse.get_pos())
+        if mouse_pos != self.pos:
+            vector_to_cursor = mouse_pos - self.pos
+            pupil_offset = vector_to_cursor / 5
+            pupil_offset.clamp_magnitude_ip(10)
         else:
-            self.image.blit(self.pupil_types['overcharged'], (19, 19))
+            pupil_offset = [0, 0]
+        self.image.blit(self.pupil_types[self.state], (19 + pupil_offset[0], 19 + pupil_offset[1]))
 
     def update_visuals(self):
         self.image = self.body_types[self.state].copy()
@@ -389,58 +349,15 @@ class Player(pg.sprite.Sprite):
         surface.blit(self.image, self.rect)
 
 
-class EnergyWave(pg.sprite.Sprite):
-
-    def __init__(self, game, pos_center, size: str, mouse_dir):
-        super().__init__()
-        self.game = game
-        self.pos = pg.Vector2(pos_center)  # position of wave's center represented as a vector
-        self.size = size
-        self.image = pg.image.load(f'resources/energy_wave/{self.size}.png').convert_alpha()
-        self.dir = self.determine_move_direction(mouse_dir)
-        self.mask = pg.mask.from_surface(self.image, 0)
-        self.rect = pg.Rect((0, 0), self.image.get_size())
-        self.rect.center = self.pos
-        self.speed = 10
-        self.vel = self.dir * self.speed
-        self.dissipating = False
-        self.alpha = 200
-        self.image.set_alpha(self.alpha)
-
-    def determine_move_direction(self, mouse_dir):
-        default_dir = pg.Vector2(0, 1)
-        angle_to_mouse = default_dir.angle_to(mouse_dir)
-        self.image = pg.transform.rotate(self.image, -angle_to_mouse)
-        return mouse_dir
-
-    def update(self):
-        if self.alpha <= 0 or self.rect.colliderect(win_rect) is False:
-            self.kill()
-            return
-        self.check_platform_collision()
-        if self.dissipating is True:
-            self.alpha -= 20
-            self.image.set_alpha(self.alpha)
-        self.pos += self.vel
-        self.rect.centerx, self.rect.centery = round(self.pos[0]), round(self.pos[1])
-
-    def check_platform_collision(self):
-        if self.dissipating is False and pg.sprite.spritecollideany(self, self.game.platforms_group):
-            if len(pg.sprite.spritecollide(self, self.game.platforms_group, False, pg.sprite.collide_mask)) > 0:
-                self.dissipating = True
-        elif self.dissipating is True and len(
-                pg.sprite.spritecollide(self, self.game.platforms_group, False, pg.sprite.collide_mask)) == 0:
-            self.dissipating = False
-
-
 class Platform(pg.sprite.Sprite):
 
-    def __init__(self, pos, tpos: tuple, tsize: tuple, type: str):
+    def __init__(self, pos: list, tpos: tuple, tsize: tuple, type: str):
         super().__init__()
+        self.pos = pos
         self.tpos = tpos  # id of the most top left occupied tile
         self.tsize = tsize  # how many tiles a platform occupies in both dimensions
         self.size = (self.tsize[0] * TILE_SIZE[0], self.tsize[1] * TILE_SIZE[1])
-        self.rect = pg.Rect(pos, self.size)
+        self.rect = pg.Rect(self.pos, self.size)
         self.type = type
         if self.type == 'default':
             # self.image = pg.image.load('resources/platform.png').convert_alpha()
@@ -449,7 +366,6 @@ class Platform(pg.sprite.Sprite):
         elif self.type == 'ground':
             self.image = pg.Surface(self.size).convert()
             self.image.fill('forestgreen')
-        self.mask = pg.mask.from_surface(self.image, 0)
 
     # NOT A RECTANGULAR-SHAPED PLATFORM
     # def __init__(self, occupied_tiles, type):

@@ -36,11 +36,9 @@ def run():
         # for tile in game.tiles_group:
         #     if tile.rect.collidepoint(mouse_pos):
         #         print(tile.id)
-        # pg.draw.line(win, 'darkgreen', (0, 100), (1000, 100), 3)
-        # output(f'offset: {win_rect.bottom - game.lowest_ordinate}', 2)
         output(f'FPS: {round(clock.get_fps(), 1)}', 2)
-        output(f'jump power: {game.player.jump_power}', 3)
-        output(f'frames past collision: {game.player.frames_past_collision}', 4)
+        # output(f'offset: {win_rect.bottom - game.lowest_ordinate}', 3)
+        # output(f'jump power: {game.player.jump_power}', 3)
         pg.display.update()
 
 
