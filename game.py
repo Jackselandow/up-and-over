@@ -6,6 +6,7 @@ pg.init()
 
 win_rect = pg.Rect((0, 0), (1000, 800))
 state = 'booting up'
+stage1 = generator.Stage()
 tiles_group = pg.sprite.Group()
 platforms_group = pg.sprite.Group()
 player = Player()
@@ -21,7 +22,7 @@ height_label = ui.Label('Height: 0', 'Consolas', 30, 'black', topleft=(win_rect.
 best_height_line = pg.Rect(0, win_rect.bottom, win_rect.width, 3)
 best_height_label = ui.Label('YOUR BEST', 'Consolas', 15, 'deepskyblue4', bottomleft=(5, best_height_line.top - 3))
 lowest_ordinate = win_rect.bottom  # the bottom bound of the screen which the current visible screen should scroll to
-generator.handle_rendering([], tiles_group, platforms_group)
+generator.handle_rendering(stage1, [], tiles_group, platforms_group)
 
 
 def handle_state(surface):
@@ -70,6 +71,7 @@ def draw_objects(surface):
 
 def restart():
     global ground_y, lowest_ordinate
+    stage1.restart()
     tiles_group.empty()
     generator.tile_map.clear()
     generator.occupied_tiles.clear()
@@ -78,7 +80,7 @@ def restart():
     ground_y = win_rect.bottom - 200
     best_height_line.top = ground_y - HEIGHT_COEFFICIENT * best_height
     best_height_label.rect.bottom = best_height_line.top - 3
-    generator.handle_rendering([], tiles_group, platforms_group)
+    generator.handle_rendering(stage1, [], tiles_group, platforms_group)
     lowest_ordinate = win_rect.bottom
 
 
@@ -113,7 +115,7 @@ def check_scroll_need():
         scroll_step = min(offset, 5)
         lowest_ordinate += scroll_step
         scroll_objects(scroll_step)
-        generator.handle_rendering(pg.sprite.spritecollide(player, tiles_group, False), tiles_group, platforms_group)
+        generator.handle_rendering(stage1, pg.sprite.spritecollide(player, tiles_group, False), tiles_group, platforms_group)
 
 
 def scroll_objects(step):

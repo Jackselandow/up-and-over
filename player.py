@@ -102,27 +102,28 @@ class Player(pg.sprite.Sprite):
                 else:
                     self.vel[1] = 0
                 self.is_on_platform = True
-            # check top side collision
-            elif self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom:
-                self.frames_past_collision = 0
-                self.collided_pos = self.pos.copy()
-                self.rect.top = hit_platform.rect.bottom
-                self.pos[1] = self.rect.centery
-                self.vel[1] = abs(self.vel[1]) * self.retention
-            # check right side collision
-            if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left:
-                self.frames_past_collision = 0
-                self.collided_pos = self.pos.copy()
-                self.rect.right = hit_platform.rect.left
-                self.pos[0] = self.rect.centerx
-                self.vel[0] = -abs(self.vel[0]) * self.retention
-            # check left side collision
-            elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right:
-                self.frames_past_collision = 0
-                self.collided_pos = self.pos.copy()
-                self.rect.left = hit_platform.rect.right
-                self.pos[0] = self.rect.centerx
-                self.vel[0] = abs(self.vel[0]) * self.retention
+            if hit_platform.solid is True:
+                # check top side collision
+                if self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom:
+                    self.frames_past_collision = 0
+                    self.collided_pos = self.pos.copy()
+                    self.rect.top = hit_platform.rect.bottom
+                    self.pos[1] = self.rect.centery
+                    self.vel[1] = abs(self.vel[1]) * self.retention
+                # check right side collision
+                if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left:
+                    self.frames_past_collision = 0
+                    self.collided_pos = self.pos.copy()
+                    self.rect.right = hit_platform.rect.left
+                    self.pos[0] = self.rect.centerx
+                    self.vel[0] = -abs(self.vel[0]) * self.retention
+                # check left side collision
+                elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right:
+                    self.frames_past_collision = 0
+                    self.collided_pos = self.pos.copy()
+                    self.rect.left = hit_platform.rect.right
+                    self.pos[0] = self.rect.centerx
+                    self.vel[0] = abs(self.vel[0]) * self.retention
 
     def draw(self, surface):
         self.update_visuals()
