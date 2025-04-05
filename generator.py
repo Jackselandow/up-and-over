@@ -11,12 +11,12 @@ INITIAL_GROUND_Y = win_rect.bottom - 200
 GROUND_GAP = 250  # gap between the ground's top and the bottom of the first tile row
 
 
-def handle_rendering(stage, overlap_tiles: list, tiles_group, platforms_group):
+def handle_rendering(stage, current_height, overlap_tiles: list, tiles_group, platforms_group):
     tile_rows_needed, highest_needed_row = calculate_render_endpoint(overlap_tiles, len(tiles_group))
     if tile_rows_needed > 0:
         render_tiles(tile_rows_needed, tiles_group)
         render_platforms(stage, highest_needed_row, platforms_group)
-        stage.update_spawn_pattern(tile_rows_needed)
+        stage.update_spawn_patterns(current_height, tile_rows_needed)
 
 
 def calculate_render_endpoint(overlap_tiles, tiles_num):
@@ -34,7 +34,7 @@ def calculate_render_endpoint(overlap_tiles, tiles_num):
 
 def render_tiles(tile_rows_needed, tiles_group):
     if len(tiles_group) == 0:
-        highest_generated_tile = Tile((0, -1), (0, INITIAL_GROUND_Y - GROUND_GAP))
+        highest_generated_tile = Tile((0, -1), [0, INITIAL_GROUND_Y - GROUND_GAP])
         highest_generated_row = -1
     else:
         highest_generated_tile = tiles_group.sprites()[-1]
@@ -89,32 +89,51 @@ class Tile(pg.sprite.Sprite):
 class Stage:
 
     def __init__(self):
-        classic_pattern = SpawnPattern('classic', 100, 120, (DefaultPlatform, DefaultPlatform))
-        difficult_pattern = SpawnPattern('difficult', 50, 80, (SolidPlatform, SolidPlatform))
-        mixed_pattern = SpawnPattern('mixed', 80, 100, (DefaultPlatform, SolidPlatform))
-        self.spawn_patterns = [classic_pattern, difficult_pattern, mixed_pattern]
-        self.current_pattern = self.spawn_patterns[0]
-        self.pattern_switch_countdown = random.randint(self.current_pattern.min_range, self.current_pattern.max_range)  # how many tile rows the current platform spawn pattern will apply
+        classic_pattern = SpawnPattern('classic', 100, 120, 0, (DefaultPlatform, DefaultPlatform))
+        difficult_pattern = SpawnPattern('difficult', 50, 80, 100, (SolidPlatform, SolidPlatform))
+        mixed_pattern = SpawnPattern('mixed', 80, 100, 50, (DefaultPlatform, SolidPlatform))
+        self.all_patterns = [classic_pattern, difficult_pattern, mixed_pattern]
+        self.pending_patterns = self.all_patterns.copy()
+        self.active_patterns = []
+        self.current_pattern = None
+        self.pattern_switch_countdown = -1  # to how many tile rows the current platform spawn pattern will apply
+        self.update_spawn_patterns()
 
-    def update_spawn_pattern(self, generated_tile_rows):
+    def update_spawn_patterns(self, current_height=0, generated_tile_rows=0):
+        self.update_pending_patterns(current_height)
         if self.pattern_switch_countdown < 0:
-            previous_pattern = self.current_pattern
-            while self.current_pattern == previous_pattern:
-                self.current_pattern = random.choice(self.spawn_patterns)
-            self.pattern_switch_countdown = random.randint(self.current_pattern.min_range, self.current_pattern.max_range)
+            self.switch_current_pattern()
         self.pattern_switch_countdown -= generated_tile_rows
 
-    def restart(self):
-        self.current_pattern = self.spawn_patterns[0]
+    def update_pending_patterns(self, current_height):
+        for pattern in self.pending_patterns:
+            if current_height >= pattern.height_threshold:
+                self.pending_patterns.remove(pattern)
+                self.active_patterns.append(pattern)
+
+    def switch_current_pattern(self):
+        if len(self.active_patterns) > 1:
+            previous_pattern = self.current_pattern
+            while self.current_pattern == previous_pattern:
+                self.current_pattern = random.choice(self.active_patterns)
+        else:
+            self.current_pattern = self.active_patterns[0]
         self.pattern_switch_countdown = random.randint(self.current_pattern.min_range, self.current_pattern.max_range)
+
+    def restart(self):
+        self.pending_patterns = self.all_patterns.copy()
+        self.active_patterns.clear()
+        self.pattern_switch_countdown = -1
+        self.update_spawn_patterns()
 
 
 class SpawnPattern:
 
-    def __init__(self, name: str, min_range: int, max_range: int, platform_types: tuple):
+    def __init__(self, name: str, min_range: int, max_range: int, height_threshold: int, platform_types: tuple):
         self.name = name
         self.min_range = min_range
         self.max_range = max_range
+        self.height_threshold = height_threshold  # reaching this height mark makes the spawn pattern active
         self.platform_types = platform_types
 
     def next_platform_type(self):

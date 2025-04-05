@@ -43,7 +43,8 @@ class Player(pg.sprite.Sprite):
 
     def handle_player_input(self):
         mouse_pressed = pg.mouse.get_pressed()
-        if mouse_pressed[0]:
+        key_pressed = pg.key.get_pressed()
+        if mouse_pressed[0] or key_pressed[pg.K_SPACE]:
             self.state = 'absorbing'
             self.jump_power += 1.6
         elif self.state == 'absorbing':
