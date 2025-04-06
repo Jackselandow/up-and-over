@@ -89,9 +89,9 @@ class Tile(pg.sprite.Sprite):
 class Stage:
 
     def __init__(self):
-        classic_pattern = SpawnPattern('classic', 100, 120, 0, 50, (DefaultPlatform, DefaultPlatform))
-        difficult_pattern = SpawnPattern('difficult', 50, 80, 100, 1000, (SolidPlatform, SolidPlatform))
-        mixed_pattern = SpawnPattern('mixed', 80, 100, 50, 100, (DefaultPlatform, SolidPlatform))
+        classic_pattern = SpawnPattern('classic', 100, 120, 0, 50, {DefaultPlatform: 1})
+        difficult_pattern = SpawnPattern('difficult', 50, 80, 100, 1000, {SolidPlatform: 1})
+        mixed_pattern = SpawnPattern('mixed', 80, 100, 50, 100, {DefaultPlatform: 1, SolidPlatform: 1})
         self.spawn_patterns = [classic_pattern, difficult_pattern, mixed_pattern]
         self.active_spawn_pattern = None
         self.pattern_switch_countdown = 0  # how many more tile rows remain to generate using the current spawn pattern
@@ -117,14 +117,14 @@ class Stage:
 
 class SpawnPattern:
 
-    def __init__(self, name: str, min_row_coverage: int, max_row_coverage: int, height_start: int, height_stop: int, platform_types: tuple):
+    def __init__(self, name: str, min_row_coverage: int, max_row_coverage: int, height_start: int, height_stop: int, platform_types: dict):
         self.name = name
         self.row_coverage_limits = (min_row_coverage, max_row_coverage)  # allowed range of tile rows which the spawn pattern will apply to
         self.available_height_range = range(height_start, height_stop)  # between which height marks the spawn pattern is available
-        self.platform_types = platform_types
+        self.platform_types = platform_types  # {PlatformType: relative weight of the possibility of being chosen}
 
     def next_platform_type(self):
-        return random.choice(self.platform_types)
+        return random.choices(list(self.platform_types.keys()), self.platform_types.values())[0]
 
 
 class Platform(pg.sprite.Sprite):
