@@ -27,7 +27,6 @@ class Game:
     lowest_ordinate = win_rect.bottom  # the bottom bound of the screen which the current visible screen should scroll to
     generator.handle_rendering(stage1, current_height, [], tiles_group, platforms_group)
 
-
     def handle_state(self, surface):
         if self.state == 'running' and self.player.rect.top > win_rect.bottom:
             self.state = 'restarting'

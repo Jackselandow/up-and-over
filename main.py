@@ -37,9 +37,8 @@ def run():
         output(f'FPS: {round(clock.get_fps(), 1)}', 2)
         # output(f'offset: {win_rect.bottom - game.lowest_ordinate}', 3)
         # output(f'jump power: {game.player.jump_power}', 3)
-        output(f'current pattern: {game.stage1.current_pattern.name}', 3)
+        output(f'active pattern: {game.stage1.active_spawn_pattern.name}', 3)
         output(f'pattern switch countdown: {game.stage1.pattern_switch_countdown}', 4)
-        output(f'active patterns: {[pattern.name for pattern in game.stage1.active_patterns]}', 5)
         pg.display.update()
 
 
