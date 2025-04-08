@@ -27,6 +27,9 @@ class Game:
     lowest_ordinate = win_rect.bottom  # the bottom bound of the screen which the current visible screen should scroll to
     generator.handle_rendering(stage1, current_height, [], tiles_group, platforms_group)
 
+    def __init__(self, difficulty):
+        self.difficulty = difficulty
+
     def handle_state(self, surface):
         if self.state == 'running' and self.player.rect.top > win_rect.bottom:
             self.state = 'restarting'
@@ -99,6 +102,11 @@ class Game:
         top_lim_offset = 100 - self.player.rect.top
         if top_lim_offset > 0:
             self.lowest_ordinate = win_rect.bottom - top_lim_offset
+        if self.difficulty == 'easy':
+            # check if the player is about to fall
+            bottom_lim_offset = self.player.rect.bottom - (win_rect.bottom - 200)
+            if bottom_lim_offset > 0:
+                self.lowest_ordinate = win_rect.bottom + bottom_lim_offset
         # check if the player has landed on a platform
         if self.player.is_on_platform is True:
             self.lowest_ordinate = self.player.rect.bottom + 200
@@ -109,6 +117,10 @@ class Game:
             self.lowest_ordinate += scroll_step
             self.scroll_objects(scroll_step)
             generator.handle_rendering(self.stage1, self.current_height, pg.sprite.spritecollide(self.player, self.tiles_group, False), self.tiles_group, self.platforms_group)
+        elif self.difficulty == 'easy' and offset < 0:
+            scroll_step = offset
+            self.lowest_ordinate += scroll_step
+            self.scroll_objects(scroll_step)
 
     def scroll_objects(self, step):
         # tiles
@@ -123,7 +135,7 @@ class Game:
         for platform in self.platforms_group:
             platform.pos[1] += step
             platform.rect.y = round(platform.pos[1])
-            if platform.rect.top >= win_rect.bottom:
+            if self.difficulty != 'easy' and platform.rect.top >= win_rect.bottom:
                 platform.kill()
         # player
         self.player.pos[1] += step

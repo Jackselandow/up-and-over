@@ -23,6 +23,7 @@ class Player(pg.sprite.Sprite):
         self.rect.center = self.pos
         self.prerect = self.rect.copy()  # copy of the rect on the last frame
         self.vel = pg.Vector2(0, 0)
+        self.max_abs_vel = 25
         self.retention = 0.9  # determines how many percent of the initial velocity will be saved after a bounce
         self.bounce_lim = 3  # lowest vertical speed limit that prevents the player from bouncing upon reaching
         self.frames_past_collision = 0
@@ -34,6 +35,7 @@ class Player(pg.sprite.Sprite):
     def update(self, platforms_group):
         self.handle_player_input()
         self.apply_external_forces()
+        self.limit_vel()
         self.pos += self.vel
         self.prerect = self.rect.copy()
         self.rect.centerx, self.rect.centery = round(self.pos[0]), round(self.pos[1])
@@ -78,6 +80,12 @@ class Player(pg.sprite.Sprite):
                 self.vel[0] = min(self.vel[0] + FRICTION, 0)
         self.vel[1] += GRAVITY
 
+    def limit_vel(self):
+        if abs(self.vel[0]) > self.max_abs_vel:
+            self.vel[0] = max(min(self.vel[0], self.max_abs_vel), -self.max_abs_vel)
+        if abs(self.vel[1]) > self.max_abs_vel:
+            self.vel[1] = max(min(self.vel[1], self.max_abs_vel), -self.max_abs_vel)
+
     def check_bounds_collision(self):
         if self.rect.left < 0:
             self.rect.left = 0
@@ -92,39 +100,46 @@ class Player(pg.sprite.Sprite):
         self.is_on_platform = False
         hit_platforms = pg.sprite.spritecollide(self, platforms_group, False)
         for hit_platform in hit_platforms:
-            # check bottom side collision
+            collided_side = None
+            # check platform's top side collision
             if self.vel[1] > 0 and self.prerect.bottom <= hit_platform.rect.top:
-                self.frames_past_collision = 0
-                self.collided_pos = self.pos.copy()
-                self.rect.bottom = hit_platform.rect.top
-                self.pos[1] = self.rect.centery
+                collided_side = 'top'
+            if hit_platform.solid is True:
+                # check platform's bottom side collision
+                if self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom:
+                    collided_side = 'bottom'
+                # check platform's left side collision
+                if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left:
+                    collided_side = 'left'
+                # check platform's right side collision
+                elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right:
+                    collided_side = 'right'
+            if collided_side:
+                self.bounce_off_platform(hit_platform, collided_side)
+
+    def bounce_off_platform(self, platform, platform_side: str):
+        self.frames_past_collision = 0
+        self.collided_pos = self.pos.copy()
+        match platform_side:
+            case 'top':
+                self.rect.bottom = platform.rect.top
                 if self.vel[1] > self.bounce_lim:
                     self.vel[1] = -abs(self.vel[1]) * self.retention
                 else:
                     self.vel[1] = 0
                 self.is_on_platform = True
-            if hit_platform.solid is True:
-                # check top side collision
-                if self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom:
-                    self.frames_past_collision = 0
-                    self.collided_pos = self.pos.copy()
-                    self.rect.top = hit_platform.rect.bottom
-                    self.pos[1] = self.rect.centery
-                    self.vel[1] = abs(self.vel[1]) * self.retention
-                # check right side collision
-                if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left:
-                    self.frames_past_collision = 0
-                    self.collided_pos = self.pos.copy()
-                    self.rect.right = hit_platform.rect.left
-                    self.pos[0] = self.rect.centerx
-                    self.vel[0] = -abs(self.vel[0]) * self.retention
-                # check left side collision
-                elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right:
-                    self.frames_past_collision = 0
-                    self.collided_pos = self.pos.copy()
-                    self.rect.left = hit_platform.rect.right
-                    self.pos[0] = self.rect.centerx
-                    self.vel[0] = abs(self.vel[0]) * self.retention
+            case 'bottom':
+                self.rect.top = platform.rect.bottom
+                self.vel[1] = abs(self.vel[1]) * self.retention
+            case 'left':
+                self.rect.right = platform.rect.left
+                self.vel[0] = -abs(self.vel[0]) * self.retention
+            case 'right':
+                self.rect.left = platform.rect.right
+                self.vel[0] = abs(self.vel[0]) * self.retention
+        self.pos.update(self.rect.center)
+        if platform.type == 'bumpy':
+            platform.bump_player(platform_side, self.vel)
 
     def draw(self, surface):
         self.update_visuals()

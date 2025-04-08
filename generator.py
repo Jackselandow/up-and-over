@@ -144,7 +144,7 @@ class Platform(pg.sprite.Sprite):
         self.rect = pg.Rect(self.pos, self.size)
         self.type = type
         self.solid = solid
-        self.image = pg.Surface(self.size).convert()
+        self.image = pg.Surface(self.size).convert_alpha()
         seized_ids = {(x_id, y_id) for y_id in range(self.tpos[1], self.tpos[1] - self.tsize[1], -1) for x_id in range(self.tpos[0], self.tpos[0] + self.tsize[0])}
         occupied_tiles.update(seized_ids)
         platforms_group.add(self)
@@ -197,3 +197,27 @@ class SolidPlatform(Platform):
     def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
         super().__init__(pos, tpos, self.tsize, 'solid', True, platforms_group)
         self.image.fill('gray75')
+
+
+class BumpyPlatform(Platform):
+    outline_tiles = 6
+    max_gap_x = 10
+    min_offset_x = 4
+    max_offset_y = 10
+    tsize = (4, 4)
+
+    def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
+        super().__init__(pos, tpos, self.tsize, 'bumpy', True, platforms_group)
+        self.image.fill('red')
+        self.bump_force = 10
+
+    def bump_player(self, platform_side: str, player_vel):
+        match platform_side:
+            case 'top':
+                player_vel[1] -= self.bump_force
+            case 'bottom':
+                player_vel[1] += self.bump_force
+            case 'left':
+                player_vel[0] -= self.bump_force
+            case 'right':
+                player_vel[0] += self.bump_force

@@ -13,7 +13,7 @@ FPS = 60
 
 def run():
     import game
-    game = game.Game()
+    game = game.Game('easy')
     while True:
         clock.tick(FPS)
         events = pg.event.get()
@@ -39,6 +39,7 @@ def run():
         # output(f'jump power: {game.player.jump_power}', 3)
         output(f'active pattern: {game.stage1.active_spawn_pattern.name}', 3)
         output(f'pattern switch countdown: {game.stage1.pattern_switch_countdown}', 4)
+        output(f'vel: {round(game.player.vel)}', 5)
         pg.display.update()
 
 
