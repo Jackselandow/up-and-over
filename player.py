@@ -140,6 +140,9 @@ class Player(pg.sprite.Sprite):
         self.pos.update(self.rect.center)
         if platform.type == 'bumpy':
             platform.bump_player(platform_side, self.vel)
+        elif platform.type == 'ghost':
+            if self.is_on_platform is True:
+                platform.got_hit()
 
     def draw(self, surface):
         self.update_visuals()

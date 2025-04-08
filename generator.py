@@ -221,3 +221,26 @@ class BumpyPlatform(Platform):
                 player_vel[0] -= self.bump_force
             case 'right':
                 player_vel[0] += self.bump_force
+
+
+class GhostPlatform(Platform):
+    outline_tiles = 5
+    max_gap_x = 15
+    min_offset_x = 0
+    max_offset_y = 12
+    tsize = (15, 1)
+
+    def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
+        super().__init__(pos, tpos, self.tsize, 'ghost', False, platforms_group)
+        self.image.fill('white')
+        self.durability = 3
+        visible_alpha = 50
+        self.alpha_decrement_step = (255 - visible_alpha) / self.durability
+
+    def got_hit(self):
+        self.durability -= 1
+        if self.durability <= 0:
+            self.kill()
+        else:
+            alpha = self.image.get_alpha()
+            self.image.set_alpha(alpha - self.alpha_decrement_step)
