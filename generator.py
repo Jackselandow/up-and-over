@@ -89,10 +89,14 @@ class Tile(pg.sprite.Sprite):
 class Stage:
 
     def __init__(self):
-        classic_pattern = SpawnPattern('classic', 100, 120, 0, 50, {DefaultPlatform: 1})
-        difficult_pattern = SpawnPattern('difficult', 50, 80, 100, 1000, {SolidPlatform: 1})
-        mixed_pattern = SpawnPattern('mixed', 80, 100, 50, 100, {DefaultPlatform: 1, SolidPlatform: 1})
-        self.spawn_patterns = [classic_pattern, difficult_pattern, mixed_pattern]
+        beginner_pattern = SpawnPattern('beginner', 50, 80, 0, 51, {DefaultPlatform: 1})
+        rocky_pattern = SpawnPattern('rocky', 50, 80, 50, 101, {SolidPlatform: 2, DefaultPlatform: 1})
+        bumpy_pattern = SpawnPattern('bumpy', 50, 80, 100, 151, {DefaultPlatform: 3, BumpyPlatform: 2})
+        tricky_pattern = SpawnPattern('tricky', 50, 80, 150, 201, {DefaultPlatform: 3, GhostPlatform: 1})
+        bumpy_rocks_pattern = SpawnPattern('bumpy rocks', 50, 100, 200, 1000, {SolidPlatform: 3, BumpyPlatform: 1})
+        ghost_pattern = SpawnPattern('ghost', 30, 50, 200, 1000, {GhostPlatform: 1})
+        mixed_pattern = SpawnPattern('mixed', 150, 200, 200, 1000, {DefaultPlatform: 3, SolidPlatform: 2, GhostPlatform: 1, BumpyPlatform: 1})
+        self.spawn_patterns = [beginner_pattern, rocky_pattern, bumpy_pattern, tricky_pattern, bumpy_rocks_pattern, ghost_pattern, mixed_pattern]
         self.active_spawn_pattern = None
         self.pattern_switch_countdown = 0  # how many more tile rows remain to generate using the current spawn pattern
         self.update_spawn_patterns()
@@ -104,7 +108,7 @@ class Stage:
 
     def switch_active_spawn_pattern(self, current_height):
         available_patterns = [pattern for pattern in self.spawn_patterns if current_height in pattern.available_height_range]
-        if len(available_patterns) > 1:
+        if len(available_patterns) > 1 and self.active_spawn_pattern in available_patterns:
             available_patterns.remove(self.active_spawn_pattern)  # avoid selecting the same pattern if other are available
         self.active_spawn_pattern = random.choice(available_patterns)
         self.pattern_switch_countdown = random.randint(self.active_spawn_pattern.row_coverage_limits[0], self.active_spawn_pattern.row_coverage_limits[1])

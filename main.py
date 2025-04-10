@@ -27,7 +27,7 @@ def run():
         game.update_objects()
         game.update_height()
         win.fill('lightskyblue1')
-        game.draw_tiles(win)
+        # game.draw_tiles(win)
         game.draw_objects(win)
         game.handle_state(win)
         # mouse_pos = pg.mouse.get_pos()
@@ -35,8 +35,6 @@ def run():
         #     if tile.rect.collidepoint(mouse_pos):
         #         print(tile.id)
         output(f'FPS: {round(clock.get_fps(), 1)}', 2)
-        # output(f'offset: {win_rect.bottom - game.lowest_ordinate}', 3)
-        # output(f'jump power: {game.player.jump_power}', 3)
         output(f'active pattern: {game.stage1.active_spawn_pattern.name}', 3)
         output(f'pattern switch countdown: {game.stage1.pattern_switch_countdown}', 4)
         output(f'vel: {round(game.player.vel)}', 5)
