@@ -32,6 +32,10 @@ class Player(pg.sprite.Sprite):
         self.max_jump_power = 100
         self.is_on_platform = True
 
+    def scroll(self, scroll_value):
+        self.pos[1] += scroll_value
+        self.rect.centery = round(self.pos[1])
+
     def update(self, platforms_group):
         self.handle_player_input()
         self.apply_external_forces()

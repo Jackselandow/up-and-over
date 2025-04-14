@@ -5,58 +5,48 @@ pg.init()
 win_rect = pg.Rect((0, 0), (1000, 800))
 tile_map = {}  # {tile index: tile}
 occupied_tiles = set()  # a set of occupied tile ids
+generated_tile_rows = []
 TILE_SIZE = (20, 20)
 WIN_TSIZE = (int(win_rect.width / TILE_SIZE[0]), int(win_rect.height / TILE_SIZE[1]))  # (50, 40)
-INITIAL_GROUND_Y = win_rect.bottom - 200
-GROUND_GAP = 250  # gap between the ground's top and the bottom of the first tile row
 
 
-def handle_rendering(stage, current_height, overlap_tiles: list, tiles_group, platforms_group):
-    tile_rows_needed, highest_needed_row = calculate_render_endpoint(overlap_tiles, len(tiles_group))
+def handle_rendering(stage, current_height, tiles_group, platforms_group):
+    tile_render_range = WIN_TSIZE[1] * 3  # determines how many tiles up from the player's position should be generated
+    if len(generated_tile_rows) == 0:
+        tile_rows_needed = tile_render_range
+    else:
+        highest_needed_row = generated_tile_rows[0] + tile_render_range
+        tile_rows_needed = highest_needed_row - generated_tile_rows[-1]
     if tile_rows_needed > 0:
         render_tiles(tile_rows_needed, tiles_group)
-        render_platforms(stage, highest_needed_row, platforms_group)
+        render_platforms(stage, platforms_group)
         stage.update_spawn_patterns(current_height, tile_rows_needed)
-
-
-def calculate_render_endpoint(overlap_tiles, tiles_num):
-    overlap_rows = [tile.id[1] for tile in overlap_tiles]
-    overlap_rows.append(-1)  # provides the lowest row value when no tile has been generated yet
-    tile_render_range = WIN_TSIZE[1] * 2  # determines how many tiles up from the player's position should be generated
-    highest_needed_row = max(overlap_rows) + tile_render_range
-    if tiles_num == 0:
-        highest_generated_row = -1
-    else:
-        highest_generated_row = list(tile_map.keys())[-1][1]
-    tile_rows_needed = highest_needed_row - highest_generated_row
-    return tile_rows_needed, highest_needed_row
 
 
 def render_tiles(tile_rows_needed, tiles_group):
     if len(tiles_group) == 0:
-        highest_generated_tile = Tile((0, -1), [0, INITIAL_GROUND_Y - GROUND_GAP])
-        highest_generated_row = -1
+        highest_generated_tile = Tile((0, -1), [0, win_rect.bottom])
+        tile_row_id = 0
     else:
         highest_generated_tile = tiles_group.sprites()[-1]
-        highest_generated_row = list(tile_map.keys())[-1][1]
+        tile_row_id = generated_tile_rows[-1] + 1
     for _ in range(tile_rows_needed):  # generate a needed number of tile rows
-        tile_row_id = highest_generated_row + 1
-        tile_row_y = highest_generated_tile.rect.y - TILE_SIZE[1]
+        tile_row_y = highest_generated_tile.pos[1] - TILE_SIZE[1]
         for column in range(int(win_rect.width / TILE_SIZE[0])):
             new_tile = Tile((column, tile_row_id), [column * TILE_SIZE[0], tile_row_y])
             tile_map.update({new_tile.id: new_tile})
             tiles_group.add(new_tile)
         highest_generated_tile = new_tile
-        highest_generated_row += 1
+        generated_tile_rows.append(tile_row_id)
+        tile_row_id += 1
 
 
-def render_platforms(stage, highest_generated_row, platforms_group):
+def render_platforms(stage, platforms_group):
     if len(platforms_group) == 0:
-        GroundPlatform([win_rect.left, INITIAL_GROUND_Y], (0, -1), platforms_group)
-        DefaultPlatform([380, INITIAL_GROUND_Y - GROUND_GAP - DefaultPlatform.tsize[1] * TILE_SIZE[1]], (19, 0), platforms_group)
+        GroundPlatform([win_rect.left, win_rect.bottom - 200], (0, 9), platforms_group)
     last_platform = platforms_group.sprites()[-1]
     platform_generation_space = WIN_TSIZE[1]  # how many tile rows should fit between the last tile and the highest generated platform
-    while highest_generated_row - last_platform.tpos[1] >= platform_generation_space:
+    while generated_tile_rows[-1] - last_platform.tpos[1] >= platform_generation_space:
         new_platform_class = stage.active_spawn_pattern.next_platform_type()
         left_lim_x = max(0, last_platform.tpos[0] - new_platform_class.max_gap_x - new_platform_class.tsize[0])
         right_lim_x = min(WIN_TSIZE[0] - new_platform_class.tsize[0], last_platform.tpos[0] + last_platform.tsize[0] + new_platform_class.max_gap_x)
@@ -70,7 +60,7 @@ def render_platforms(stage, highest_generated_row, platforms_group):
             if not platform_outline_ids & occupied_tiles:
                 break
         toffset_y = tpos[1] - last_platform.tpos[1]
-        pos = [tpos[0] * TILE_SIZE[0], last_platform.rect.y - toffset_y * TILE_SIZE[1]]
+        pos = [tpos[0] * TILE_SIZE[0], last_platform.pos[1] - toffset_y * TILE_SIZE[1]]
         new_platform = new_platform_class(pos, tpos, platforms_group)
         last_platform = new_platform
 
@@ -84,6 +74,16 @@ class Tile(pg.sprite.Sprite):
         self.size = size
         self.rect = pg.Rect(self.pos, self.size)
         # self.content = None
+
+    def scroll(self, scroll_value):
+        self.pos[1] += scroll_value
+        self.rect.y = round(self.pos[1])
+        if self.rect.top >= win_rect.bottom:
+            tile_map.pop(self.id)
+            occupied_tiles.discard(self.id)
+            if self.id[1] in generated_tile_rows:
+                generated_tile_rows.remove(self.id[1])
+            self.kill()
 
 
 class Stage:
@@ -101,10 +101,10 @@ class Stage:
         self.pattern_switch_countdown = 0  # how many more tile rows remain to generate using the current spawn pattern
         self.update_spawn_patterns()
 
-    def update_spawn_patterns(self, current_height=0, generated_tile_rows=0):
+    def update_spawn_patterns(self, current_height=0, added_tile_rows=0):
         if self.pattern_switch_countdown <= 0:
             self.switch_active_spawn_pattern(current_height)
-        self.pattern_switch_countdown -= generated_tile_rows
+        self.pattern_switch_countdown -= added_tile_rows
 
     def switch_active_spawn_pattern(self, current_height):
         available_patterns = [pattern for pattern in self.spawn_patterns if current_height in pattern.available_height_range]
@@ -152,6 +152,12 @@ class Platform(pg.sprite.Sprite):
         seized_ids = {(x_id, y_id) for y_id in range(self.tpos[1], self.tpos[1] - self.tsize[1], -1) for x_id in range(self.tpos[0], self.tpos[0] + self.tsize[0])}
         occupied_tiles.update(seized_ids)
         platforms_group.add(self)
+
+    def scroll(self, scroll_value, game_difficulty):
+        self.pos[1] += scroll_value
+        self.rect.y = round(self.pos[1])
+        if game_difficulty != 'easy' and self.rect.top >= win_rect.bottom:
+            self.kill()
 
     # NOT A RECTANGULAR-SHAPED PLATFORM
     # def __init__(self, occupied_tiles, type):

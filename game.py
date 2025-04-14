@@ -20,12 +20,13 @@ class Game:
     black_screen.fill('black')
     ground_y = win_rect.bottom - 200
     current_height = 0
-    best_height = 0
-    height_label = ui.Label('Height: 0', 'Consolas', 30, 'black', topleft=(win_rect.left + 10, win_rect.top + 10))
-    best_height_line = pg.Rect(0, win_rect.bottom, win_rect.width, 3)
-    best_height_label = ui.Label('YOUR BEST', 'Consolas', 15, 'deepskyblue4', bottomleft=(5, best_height_line.top - 3))
-    lowest_ordinate = win_rect.bottom  # the bottom bound of the screen which the current visible screen should scroll to
-    generator.handle_rendering(stage1, current_height, [], tiles_group, platforms_group)
+    reached_height = 0  # best height of the current attempt
+    best_height = 0  # best height of all attempts
+    height_label = ui.Label('Height: 0', 'Consolas', 30, 'black', None, 'topleft', (win_rect.left + 10, win_rect.top + 10))
+    best_height_line = ui.Element([0, win_rect.bottom], (win_rect.width, 3), 'deepskyblue4')
+    best_height_label = ui.Label('YOUR BEST', 'Consolas', 15, 'deepskyblue4', None, 'bottomleft', (5, best_height_line.pos[1] - 3))
+    screen_offset_y = 0  # offset > 0 => screen should be scrolled upward; offset < 0 => screen should be scrolled downward
+    scroll_speed = 0
 
     def __init__(self, difficulty):
         self.difficulty = difficulty
@@ -58,11 +59,14 @@ class Game:
     def update_height(self):
         self.current_height = int((self.ground_y - self.player.rect.top) / HUNIT)
         self.height_label.update_text(f'Height: {self.current_height}')
-        if self.current_height > self.best_height:
-            self.best_height = self.current_height
+        if self.current_height > self.reached_height:
+            self.reached_height = self.current_height
+            generator.handle_rendering(self.stage1, self.current_height, self.tiles_group, self.platforms_group)
+            if self.current_height > self.best_height:
+                self.best_height = self.current_height
 
     def draw_objects(self, surface):
-        pg.draw.rect(surface, 'deepskyblue4', self.best_height_line)
+        self.best_height_line.draw(surface)
         self.best_height_label.draw(surface)
         self.platforms_group.draw(surface)
         self.player.draw(surface)
@@ -73,14 +77,15 @@ class Game:
         self.tiles_group.empty()
         generator.tile_map.clear()
         generator.occupied_tiles.clear()
+        generator.generated_tile_rows.clear()
         self.platforms_group.empty()
         self.player.__init__()
         self.ground_y = win_rect.bottom - 200
         self.current_height = 0
-        self.best_height_line.top = self.ground_y - HUNIT * self.best_height
-        self.best_height_label.rect.bottom = self.best_height_line.top - 3
-        generator.handle_rendering(self.stage1, self.current_height, [], self.tiles_group, self.platforms_group)
-        self.lowest_ordinate = win_rect.bottom
+        self.reached_height = 0
+        self.best_height_line.update_pos([0, self.ground_y - HUNIT * self.best_height])
+        self.best_height_label.update_pos('bottomleft', (5, self.best_height_line.pos[1] - 3))
+        self.screen_offset_y = 0
 
     def draw_tiles(self, surface, grid_type=1):
         """
@@ -98,49 +103,42 @@ class Game:
                 pg.draw.line(surface, 'gray70', (0, TILE_SIZE[1] * line_num), (win_rect.right, TILE_SIZE[1] * line_num))
 
     def check_scroll_need(self):
+        self.detect_screen_offset()
+        if self.screen_offset_y > 0:
+            scroll_step = min(self.screen_offset_y, self.scroll_speed)
+            self.scroll_objects(scroll_step)
+            self.screen_offset_y -= scroll_step
+        elif self.difficulty == 'easy' and self.screen_offset_y < 0:
+            scroll_step = self.screen_offset_y
+            self.scroll_objects(scroll_step)
+            self.screen_offset_y -= scroll_step
+
+    def detect_screen_offset(self):
+        screen_offset_offers = []
         # check if the player is too close to the top bound
-        top_lim_offset = 100 - self.player.rect.top
+        top_lim_offset = 150 - self.player.rect.top
         if top_lim_offset > 0:
-            self.lowest_ordinate = win_rect.bottom - top_lim_offset
+            screen_offset_offers.append(top_lim_offset + 100)
         if self.difficulty == 'easy':
             # check if the player is about to fall
-            bottom_lim_offset = self.player.rect.bottom - (win_rect.bottom - 200)
-            if bottom_lim_offset > 0:
-                self.lowest_ordinate = win_rect.bottom + bottom_lim_offset
+            bottom_lim_offset = win_rect.bottom - 200 - self.player.rect.bottom
+            if bottom_lim_offset < 0:
+                self.screen_offset_y = bottom_lim_offset
         # check if the player has landed on a platform
         if self.player.is_on_platform is True:
-            self.lowest_ordinate = self.player.rect.bottom + 200
+            screen_offset_offers.append(win_rect.bottom - (self.player.rect.bottom + 200))
 
-        offset = win_rect.bottom - self.lowest_ordinate
-        if offset > 0:
-            scroll_step = min(offset, 5)
-            self.lowest_ordinate += scroll_step
-            self.scroll_objects(scroll_step)
-            generator.handle_rendering(self.stage1, self.current_height, pg.sprite.spritecollide(self.player, self.tiles_group, False), self.tiles_group, self.platforms_group)
-        elif self.difficulty == 'easy' and offset < 0:
-            scroll_step = offset
-            self.lowest_ordinate += scroll_step
-            self.scroll_objects(scroll_step)
+        if len(screen_offset_offers) > 0 and max(screen_offset_offers) > self.screen_offset_y:
+            self.screen_offset_y = max(screen_offset_offers)
+            min_scroll_speed = 5
+            self.scroll_speed = max(round(self.screen_offset_y / 45), min_scroll_speed)
 
     def scroll_objects(self, step):
-        # tiles
         for tile in self.tiles_group:
-            tile.pos[1] += step
-            tile.rect.y = round(tile.pos[1])
-            if tile.rect.top >= win_rect.bottom:
-                generator.tile_map.pop(tile.id)
-                generator.occupied_tiles.discard(tile.id)
-                tile.kill()
-        # platforms
+            tile.scroll(step)
         for platform in self.platforms_group:
-            platform.pos[1] += step
-            platform.rect.y = round(platform.pos[1])
-            if self.difficulty != 'easy' and platform.rect.top >= win_rect.bottom:
-                platform.kill()
-        # player
-        self.player.pos[1] += step
-        self.player.rect.centery = round(self.player.pos[1])
-        # height-related objects
+            platform.scroll(step, self.difficulty)
+        self.player.scroll(step)
         self.ground_y += step
-        self.best_height_line.y += step
-        self.best_height_label.rect.y += step
+        self.best_height_line.scroll(step)
+        self.best_height_label.scroll(step)
