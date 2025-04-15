@@ -52,7 +52,7 @@ class Player(pg.sprite.Sprite):
         key_pressed = pg.key.get_pressed()
         if mouse_pressed[0] or key_pressed[pg.K_SPACE]:
             self.state = 'absorbing'
-            self.jump_power += 1.6
+            self.jump_power += 3
         elif self.state == 'absorbing':
             self.state = 'default'
             self.release_jump()
@@ -70,9 +70,10 @@ class Player(pg.sprite.Sprite):
         allowed_collision_offset = 80  # after getting this far from a collided pos, the player can no longer jump off the collided surface
         if self.frames_past_collision <= allowed_collision_delay and self.pos.distance_to(self.collided_pos) <= allowed_collision_offset:
             mouse_dir = self.get_mouse_dir()
-            power_to_vel_coefficient = 0.18
-            gained_vel = min(self.jump_power, self.max_jump_power) * power_to_vel_coefficient
-            self.vel += mouse_dir * gained_vel
+            if mouse_dir[1] < 0:
+                power_to_vel_coefficient = 0.15
+                gained_vel = min(self.jump_power, self.max_jump_power) * power_to_vel_coefficient
+                self.vel += mouse_dir * gained_vel
         self.jump_power = 0
 
     def apply_external_forces(self):

@@ -89,13 +89,13 @@ class Tile(pg.sprite.Sprite):
 class Stage:
 
     def __init__(self):
-        beginner_pattern = SpawnPattern('beginner', 50, 80, 0, 51, {DefaultPlatform: 1})
-        rocky_pattern = SpawnPattern('rocky', 50, 80, 50, 101, {SolidPlatform: 2, DefaultPlatform: 1})
-        bumpy_pattern = SpawnPattern('bumpy', 50, 80, 100, 151, {DefaultPlatform: 3, BumpyPlatform: 2})
-        tricky_pattern = SpawnPattern('tricky', 50, 80, 150, 201, {DefaultPlatform: 3, GhostPlatform: 1})
-        bumpy_rocks_pattern = SpawnPattern('bumpy rocks', 50, 100, 200, 1000, {SolidPlatform: 3, BumpyPlatform: 1})
-        ghost_pattern = SpawnPattern('ghost', 30, 50, 200, 1000, {GhostPlatform: 1})
-        mixed_pattern = SpawnPattern('mixed', 150, 200, 200, 1000, {DefaultPlatform: 3, SolidPlatform: 2, GhostPlatform: 1, BumpyPlatform: 1})
+        beginner_pattern = SpawnPattern('beginner', 50, 80, 0, 31, {DefaultPlatform: 1})
+        rocky_pattern = SpawnPattern('rocky', 50, 80, 30, 121, {SolidPlatform: 2, DefaultPlatform: 1})
+        bumpy_pattern = SpawnPattern('bumpy', 50, 80, 120, 211, {DefaultPlatform: 3, BumpyPlatform: 1})
+        tricky_pattern = SpawnPattern('tricky', 50, 80, 210, 301, {DefaultPlatform: 3, GhostPlatform: 1})
+        bumpy_rocks_pattern = SpawnPattern('bumpy rocks', 80, 150, 300, 1000, {SolidPlatform: 3, BumpyPlatform: 1})
+        ghost_pattern = SpawnPattern('ghost', 40, 80, 300, 1000, {GhostPlatform: 1})
+        mixed_pattern = SpawnPattern('mixed', 150, 200, 300, 1000, {DefaultPlatform: 3, SolidPlatform: 2, GhostPlatform: 1, BumpyPlatform: 1})
         self.spawn_patterns = [beginner_pattern, rocky_pattern, bumpy_pattern, tricky_pattern, bumpy_rocks_pattern, ghost_pattern, mixed_pattern]
         self.active_spawn_pattern = None
         self.pattern_switch_countdown = 0  # how many more tile rows remain to generate using the current spawn pattern
@@ -156,7 +156,10 @@ class Platform(pg.sprite.Sprite):
     def scroll(self, scroll_value, game_difficulty):
         self.pos[1] += scroll_value
         self.rect.y = round(self.pos[1])
-        if game_difficulty != 'easy' and self.rect.top >= win_rect.bottom:
+        if game_difficulty == 'easy':
+            if generated_tile_rows[0] - self.tpos[1] > 100:
+                self.kill()
+        elif self.rect.top >= win_rect.bottom:
             self.kill()
 
     # NOT A RECTANGULAR-SHAPED PLATFORM
@@ -186,7 +189,7 @@ class GroundPlatform(Platform):
 
 
 class DefaultPlatform(Platform):
-    outline_tiles = 5
+    outline_tiles = 8
     max_gap_x = 15
     min_offset_x = 0
     max_offset_y = 12
@@ -198,10 +201,10 @@ class DefaultPlatform(Platform):
 
 
 class SolidPlatform(Platform):
-    outline_tiles = 6
-    max_gap_x = 10
-    min_offset_x = 4
-    max_offset_y = 10
+    outline_tiles = 8
+    max_gap_x = 12
+    min_offset_x = 5
+    max_offset_y = 12
     tsize = (12, 2)
 
     def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
@@ -210,10 +213,10 @@ class SolidPlatform(Platform):
 
 
 class BumpyPlatform(Platform):
-    outline_tiles = 6
-    max_gap_x = 10
+    outline_tiles = 5
+    max_gap_x = 9
     min_offset_x = 4
-    max_offset_y = 10
+    max_offset_y = 9
     tsize = (4, 4)
 
     def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
@@ -234,16 +237,16 @@ class BumpyPlatform(Platform):
 
 
 class GhostPlatform(Platform):
-    outline_tiles = 5
-    max_gap_x = 15
+    outline_tiles = 4
+    max_gap_x = 10
     min_offset_x = 0
     max_offset_y = 12
-    tsize = (15, 1)
+    tsize = (14, 1)
 
     def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
         super().__init__(pos, tpos, self.tsize, 'ghost', False, platforms_group)
         self.image.fill('white')
-        self.durability = 3
+        self.durability = 4
         visible_alpha = 50
         self.alpha_decrement_step = (255 - visible_alpha) / self.durability
 

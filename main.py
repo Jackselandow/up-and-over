@@ -32,6 +32,7 @@ def run():
 def debug():
     import game
     game = game.Game('easy')
+    hitbox_view = False
     while True:
         clock.tick(FPS)
         events = pg.event.get()
@@ -42,13 +43,17 @@ def debug():
         mouse_pos = pg.mouse.get_pos()
         if key_pressed[pg.K_r]:
             game.state = 'restarting'
+        elif key_pressed[pg.K_q]:
+            hitbox_view = not hitbox_view
         game.check_scroll_need()
         game.update_objects()
         game.update_height()
         win.fill('lightskyblue1')
         game.draw_tiles(win)
-        if not key_pressed[pg.K_q]:
+        if hitbox_view is False:
             game.draw_objects(win)
+        else:
+            game.draw_hitboxes(win)
         game.handle_state(win)
         output(f'FPS: {round(clock.get_fps(), 1)}', 2)
         output(f'active pattern: {game.stage1.active_spawn_pattern.name}', 3)
@@ -61,4 +66,4 @@ def debug():
 
 
 if __name__ == "__main__":
-    debug()
+    run()
