@@ -11,8 +11,8 @@ class Element:
         self.surface = pg.Surface(self.size)
         self.surface.fill(color)
 
-    def draw(self, surface):
-        surface.blit(self.surface, self.rect)
+    def draw(self, canvas):
+        canvas.blit(self.surface, self.rect)
 
     def scroll(self, scroll_value):
         self.pos[1] += scroll_value
@@ -35,8 +35,8 @@ class Label:
         setattr(self.rect, pos_attr, pos_value)
         self.pos = list(self.rect.topleft)
 
-    def draw(self, surface):
-        surface.blit(self.surface, self.rect)
+    def draw(self, canvas):
+        canvas.blit(self.surface, self.rect)
 
     def scroll(self, scroll_value):
         self.pos[1] += scroll_value

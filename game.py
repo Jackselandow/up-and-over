@@ -31,7 +31,7 @@ class Game:
     def __init__(self, difficulty):
         self.difficulty = difficulty
 
-    def handle_state(self, surface):
+    def handle_state(self):
         if self.state == 'running' and self.player.rect.top > win_rect.bottom:
             self.state = 'restarting'
         if self.state == 'restarting':
@@ -39,7 +39,6 @@ class Game:
             if black_screen_alpha < 255:
                 black_screen_alpha += 10
                 self.black_screen.set_alpha(black_screen_alpha)
-                surface.blit(self.black_screen, (0, 0))
             else:
                 self.state = 'booting up'
                 self.restart()
@@ -48,13 +47,12 @@ class Game:
             if black_screen_alpha > 0:
                 black_screen_alpha -= 5
                 self.black_screen.set_alpha(black_screen_alpha)
-                surface.blit(self.black_screen, (0, 0))
             else:
                 self.state = 'running'
 
-    def update_objects(self):
+    def update_objects(self, mouse_pos):
         if self.state == 'running':
-            self.player.update(self.platforms_group)
+            self.player.update(mouse_pos, self.platforms_group)
 
     def update_height(self):
         self.current_height = int((self.ground_y - self.player.rect.top) / HUNIT)
@@ -65,29 +63,30 @@ class Game:
             if self.current_height > self.best_height:
                 self.best_height = self.current_height
 
-    def draw_objects(self, surface):
-        self.best_height_line.draw(surface)
-        self.best_height_label.draw(surface)
-        self.platforms_group.draw(surface)
-        self.player.draw(surface)
-        self.height_label.draw(surface)
+    def draw_objects(self, canvas, mouse_pos):
+        self.best_height_line.draw(canvas)
+        self.best_height_label.draw(canvas)
+        self.platforms_group.draw(canvas)
+        self.player.draw(canvas, mouse_pos)
+        self.height_label.draw(canvas)
+        canvas.blit(self.black_screen, (0, 0))
 
-    def draw_tiles(self, surface, grid_type=1):
+    def draw_tiles(self, canvas, grid_type=1):
         if grid_type == 1:
             for tile in self.tiles_group:
-                pg.draw.circle(surface, 'gray70', tile.rect.topleft, 1)
+                pg.draw.circle(canvas, 'gray70', tile.rect.topleft, 1)
                 if tile.id in generator.occupied_tiles:
-                    pg.draw.rect(surface, 'red', tile.rect)
+                    pg.draw.rect(canvas, 'red', tile.rect)
         if grid_type == 2:
             for col_num in range(int(win_rect.width / TILE_SIZE[0]) + 1):
-                pg.draw.line(surface, 'gray70', (TILE_SIZE[0] * col_num, 0), (TILE_SIZE[0] * col_num, win_rect.bottom))
+                pg.draw.line(canvas, 'gray70', (TILE_SIZE[0] * col_num, 0), (TILE_SIZE[0] * col_num, win_rect.bottom))
             for line_num in range(int(win_rect.height / TILE_SIZE[1]) + 1):
-                pg.draw.line(surface, 'gray70', (0, TILE_SIZE[1] * line_num), (win_rect.right, TILE_SIZE[1] * line_num))
+                pg.draw.line(canvas, 'gray70', (0, TILE_SIZE[1] * line_num), (win_rect.right, TILE_SIZE[1] * line_num))
 
-    def draw_hitboxes(self, surface):
-        pg.draw.rect(surface, 'blue', self.player.rect)
+    def draw_hitboxes(self, canvas):
+        pg.draw.rect(canvas, 'blue', self.player.rect)
         for platform in self.platforms_group:
-            pg.draw.rect(surface, 'red', platform.rect)
+            pg.draw.rect(canvas, 'red', platform.rect)
 
     def check_scroll_need(self):
         self.detect_screen_offset()

@@ -176,9 +176,9 @@ class Platform(pg.sprite.Sprite):
     #     for tile in self.occupied_tiles:
     #         self.image.fill('white', ((tile.pos[0] - self.pos[0], tile.pos[1] - self.pos[1]), tile.size))
     #
-    # def draw(self, surface):
+    # def draw(self, canvas):
     #     for tile in self.occupied_tiles:
-    #         surface.blit(tile.image, tile.rect)
+    #         canvas.blit(tile.image, tile.rect)
 
 
 class GroundPlatform(Platform):

@@ -36,8 +36,8 @@ class Player(pg.sprite.Sprite):
         self.pos[1] += scroll_value
         self.rect.centery = round(self.pos[1])
 
-    def update(self, platforms_group):
-        self.handle_player_input()
+    def update(self, mouse_pos, platforms_group):
+        self.handle_player_input(mouse_pos)
         self.apply_external_forces()
         self.limit_vel()
         self.pos += self.vel
@@ -47,7 +47,7 @@ class Player(pg.sprite.Sprite):
         self.check_bounds_collision()
         self.check_platform_collision(platforms_group)
 
-    def handle_player_input(self):
+    def handle_player_input(self, mouse_pos):
         mouse_pressed = pg.mouse.get_pressed()
         key_pressed = pg.key.get_pressed()
         if mouse_pressed[0] or key_pressed[pg.K_SPACE]:
@@ -55,21 +55,20 @@ class Player(pg.sprite.Sprite):
             self.jump_power += 3
         elif self.state == 'absorbing':
             self.state = 'default'
-            self.release_jump()
+            self.release_jump(mouse_pos)
 
-    def get_mouse_dir(self):
-        mouse_pos = pg.Vector2(pg.mouse.get_pos())
+    def get_mouse_dir(self, mouse_pos):
         if mouse_pos != self.pos:
             mouse_dir = (mouse_pos - self.pos).normalize()
         else:
             mouse_dir = pg.Vector2(0, 1)
         return mouse_dir
 
-    def release_jump(self):
+    def release_jump(self, mouse_pos):
         allowed_collision_delay = 12  # after this number of frames since collision, the player can no longer jump off the collided surface
         allowed_collision_offset = 80  # after getting this far from a collided pos, the player can no longer jump off the collided surface
         if self.frames_past_collision <= allowed_collision_delay and self.pos.distance_to(self.collided_pos) <= allowed_collision_offset:
-            mouse_dir = self.get_mouse_dir()
+            mouse_dir = self.get_mouse_dir(mouse_pos)
             if mouse_dir[1] < 0:
                 power_to_vel_coefficient = 0.15
                 gained_vel = min(self.jump_power, self.max_jump_power) * power_to_vel_coefficient
@@ -149,14 +148,14 @@ class Player(pg.sprite.Sprite):
             if self.is_on_platform is True:
                 platform.got_hit()
 
-    def draw(self, surface):
-        self.update_visuals()
-        surface.blit(self.image, self.rect)
+    def draw(self, canvas, mouse_pos):
+        self.update_visuals(mouse_pos)
+        canvas.blit(self.image, self.rect)
 
-    def update_visuals(self):
+    def update_visuals(self, mouse_pos):
         self.image = self.body_types[self.state].copy()
         self.update_energy_filling()
-        self.update_pupil()
+        self.update_pupil(mouse_pos)
 
     def update_energy_filling(self):
         eyeball = self.eyeball.copy()
@@ -166,8 +165,8 @@ class Player(pg.sprite.Sprite):
         eyeball.blit(energy_filling, (0, eyeball_size[1] - eyeball_size[1] * relative_fullness), (0, eyeball_size[1] - eyeball_size[1] * relative_fullness, eyeball_size[0], eyeball_size[1] * relative_fullness))
         self.image.blit(eyeball, (5, 5))
 
-    def update_pupil(self):
-        mouse_pos = pg.Vector2(pg.mouse.get_pos())
+    def update_pupil(self, mouse_pos):
+        mouse_pos = pg.Vector2(mouse_pos)
         if mouse_pos != self.pos:
             vector_to_cursor = mouse_pos - self.pos
             pupil_offset = vector_to_cursor / 5
