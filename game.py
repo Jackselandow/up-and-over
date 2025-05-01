@@ -4,9 +4,9 @@ from player import Player
 import ui
 pg.init()
 
-win_rect = pg.Rect((0, 0), (1000, 800))
-TILE_SIZE = (20, 20)
-HUNIT = 50  # how many pixels a single height unit occupies
+win_rect = pg.Rect((0, 0), (640, 360))
+TILE_SIZE = (8, 8)
+HUNIT = 20  # how many pixels a single height unit occupies
 
 
 class Game:
@@ -18,13 +18,13 @@ class Game:
 
     black_screen = pg.Surface(win_rect.size).convert_alpha()
     black_screen.fill('black')
-    ground_y = win_rect.bottom - 200
+    ground_y = win_rect.bottom - TILE_SIZE[1] * 10
     current_height = 0
     reached_height = 0  # best height of the current attempt
     best_height = 0  # best height of all attempts
-    height_label = ui.Label('Height: 0', 'Consolas', 30, 'black', None, 'topleft', (win_rect.left + 10, win_rect.top + 10))
-    best_height_line = ui.Element([0, win_rect.bottom], (win_rect.width, 3), 'deepskyblue4')
-    best_height_label = ui.Label('YOUR BEST', 'Consolas', 15, 'deepskyblue4', None, 'bottomleft', (5, best_height_line.pos[1] - 3))
+    height_label = ui.Label('Height: 0', 'Consolas', 26, 'black', None, 'topleft', (win_rect.left + 10, win_rect.top + 10))
+    best_height_line = ui.Element([0, win_rect.bottom], (win_rect.width, 2), 'deepskyblue4')
+    best_height_label = ui.Label('YOUR BEST', 'Consolas', 10, 'deepskyblue4', None, 'bottomleft', (1, best_height_line.pos[1] - 1))
     screen_offset_y = 0  # offset > 0 => screen should be scrolled upward; offset < 0 => screen should be scrolled downward
     scroll_speed = 0
 
@@ -101,18 +101,18 @@ class Game:
 
     def detect_screen_offset(self):
         screen_offset_offers = []
-        # check if the player is too close to the top bound
-        top_lim_offset = 150 - self.player.rect.top
-        if top_lim_offset > 0:
-            screen_offset_offers.append(top_lim_offset + 100)
-        if self.difficulty == 'easy' and self.reached_height - self.current_height < 50:
-            # check if the player is about to fall
-            bottom_lim_offset = win_rect.bottom - 200 - self.player.rect.bottom
-            if bottom_lim_offset < 0:
-                self.screen_offset_y = bottom_lim_offset
+        # # check if the player is too close to the top bound
+        # top_lim_offset = 150 - self.player.rect.top
+        # if top_lim_offset > 0:
+        #     screen_offset_offers.append(top_lim_offset + 100)
+        # if self.difficulty == 'easy' and self.reached_height - self.current_height < 50:
+        #     # check if the player is about to fall
+        #     bottom_lim_offset = win_rect.bottom - 200 - self.player.rect.bottom
+        #     if bottom_lim_offset < 0:
+        #         self.screen_offset_y = bottom_lim_offset
         # check if the player has landed on a platform
         if self.player.is_on_platform is True:
-            screen_offset_offers.append(win_rect.bottom - (self.player.rect.bottom + 200))
+            screen_offset_offers.append(win_rect.bottom - (self.player.rect.bottom + TILE_SIZE[1] * 10))
 
         if len(screen_offset_offers) > 0 and max(screen_offset_offers) > self.screen_offset_y:
             self.screen_offset_y = max(screen_offset_offers)
@@ -137,7 +137,7 @@ class Game:
         generator.generated_tile_rows.clear()
         self.platforms_group.empty()
         self.player.__init__()
-        self.ground_y = win_rect.bottom - 200
+        self.ground_y = win_rect.bottom - TILE_SIZE[1] * 10
         self.current_height = 0
         self.reached_height = 0
         self.best_height_line.update_pos([0, self.ground_y - HUNIT * self.best_height])

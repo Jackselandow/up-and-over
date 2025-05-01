@@ -30,7 +30,7 @@ class Label:
         self.fg = fg
         self.bg = bg
         self.font = pg.font.SysFont(font_name, font_size)
-        self.surface = self.font.render(text, True, fg, bg).convert_alpha()
+        self.surface = self.font.render(text, False, fg, bg).convert_alpha()
         self.rect = self.surface.get_rect()
         setattr(self.rect, pos_attr, pos_value)
         self.pos = list(self.rect.topleft)
@@ -48,5 +48,5 @@ class Label:
 
     def update_text(self, new_text):
         self.text = new_text
-        self.surface = self.font.render(self.text, True, self.fg, self.bg).convert_alpha()
+        self.surface = self.font.render(self.text, False, self.fg, self.bg).convert_alpha()
         self.rect.size = self.surface.get_size()

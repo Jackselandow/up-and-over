@@ -1,7 +1,7 @@
 import pygame as pg
 pg.init()
 
-win_rect = pg.Rect((0, 0), (1000, 800))
+win_rect = pg.Rect((0, 0), (640, 360))
 DRAG = 0.014
 GRAVITY = 0.4
 FRICTION = 0.2
@@ -11,8 +11,8 @@ class Player(pg.sprite.Sprite):
 
     def __init__(self):
         super().__init__()
-        self.pos = pg.Vector2(500, 575)  # position of player's center represented as a vector
-        self.size = [50, 50]
+        self.pos = pg.Vector2(150, 200)  # position of player's center represented as a vector
+        self.size = [24, 24]
         self.state = 'default'
         self.body_types = {'default': pg.image.load('resources/player/body/default.png').convert_alpha(), 'absorbing': pg.image.load('resources/player/body/absorbing.png').convert_alpha()}
         self.eyeball = pg.image.load('resources/player/eyeball.png').convert_alpha()
@@ -30,7 +30,7 @@ class Player(pg.sprite.Sprite):
         self.collided_pos = pg.Vector2(0, 0)  # player's position when the last collision happened
         self.jump_power = 0
         self.max_jump_power = 100
-        self.is_on_platform = True
+        self.is_on_platform = False
 
     def scroll(self, scroll_value):
         self.pos[1] += scroll_value

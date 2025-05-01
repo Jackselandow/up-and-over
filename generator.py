@@ -2,11 +2,11 @@ import pygame as pg
 import random
 pg.init()
 
-win_rect = pg.Rect((0, 0), (1000, 800))
+win_rect = pg.Rect((0, 0), (640, 360))
 tile_map = {}  # {tile index: tile}
 occupied_tiles = set()  # a set of occupied tile ids
 generated_tile_rows = []
-TILE_SIZE = (20, 20)
+TILE_SIZE = (8, 8)
 WIN_TSIZE = (int(win_rect.width / TILE_SIZE[0]), int(win_rect.height / TILE_SIZE[1]))  # (50, 40)
 
 
@@ -30,7 +30,7 @@ def render_tiles(tile_rows_needed, tiles_group):
     else:
         highest_generated_tile = tiles_group.sprites()[-1]
         tile_row_id = generated_tile_rows[-1] + 1
-    for _ in range(tile_rows_needed):  # generate a needed number of tile rows
+    for _ in range(tile_rows_needed):  # generate a necessary number of tile rows
         tile_row_y = highest_generated_tile.pos[1] - TILE_SIZE[1]
         for column in range(int(win_rect.width / TILE_SIZE[0])):
             new_tile = Tile((column, tile_row_id), [column * TILE_SIZE[0], tile_row_y])
@@ -43,7 +43,7 @@ def render_tiles(tile_rows_needed, tiles_group):
 
 def render_platforms(stage, platforms_group):
     if len(platforms_group) == 0:
-        GroundPlatform([win_rect.left, win_rect.bottom - 200], (0, 9), platforms_group)
+        GroundPlatform([win_rect.left, win_rect.bottom - TILE_SIZE[1] * 10], (0, 9), platforms_group)
     last_platform = platforms_group.sprites()[-1]
     platform_generation_space = WIN_TSIZE[1]  # how many tile rows should fit between the last tile and the highest generated platform
     while generated_tile_rows[-1] - last_platform.tpos[1] >= platform_generation_space:
@@ -184,7 +184,7 @@ class Platform(pg.sprite.Sprite):
 class GroundPlatform(Platform):
 
     def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
-        super().__init__(pos, tpos, (50, 10), 'solid', False, platforms_group)
+        super().__init__(pos, tpos, (WIN_TSIZE[0], 10), 'solid', False, platforms_group)
         self.image.fill('forestgreen')
 
 
