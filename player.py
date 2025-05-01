@@ -2,8 +2,8 @@ import pygame as pg
 pg.init()
 
 win_rect = pg.Rect((0, 0), (640, 360))
-DRAG = 0.014
-GRAVITY = 0.4
+DRAG = 0.007
+GRAVITY = 0.2
 FRICTION = 0.2
 
 
@@ -18,14 +18,15 @@ class Player(pg.sprite.Sprite):
         self.eyeball = pg.image.load('resources/player/eyeball.png').convert_alpha()
         self.energy_filling = pg.image.load('resources/player/energy_filling.png').convert_alpha()
         self.pupil_types = {'default': pg.image.load('resources/player/pupil/default.png').convert_alpha(), 'absorbing': pg.image.load('resources/player/pupil/absorbing.png').convert_alpha()}
-        self.image = self.body_types[self.state].copy()
+        # self.image = self.body_types[self.state].copy()
+        self.image = pg.image.load('resources/player/new_shape.png').convert_alpha()
         self.rect = pg.Rect((0, 0), self.size)
         self.rect.center = self.pos
         self.prerect = self.rect.copy()  # copy of the rect on the last frame
         self.vel = pg.Vector2(0, 0)
         self.max_abs_vel = 25
         self.retention = 0.9  # determines how many percent of the initial velocity will be saved after a bounce
-        self.bounce_lim = 3  # lowest vertical speed limit that prevents the player from bouncing upon reaching
+        self.bounce_lim = 2  # lowest vertical speed limit that prevents the player from bouncing upon reaching
         self.frames_past_collision = 0
         self.collided_pos = pg.Vector2(0, 0)  # player's position when the last collision happened
         self.jump_power = 0
@@ -70,7 +71,7 @@ class Player(pg.sprite.Sprite):
         if self.frames_past_collision <= allowed_collision_delay and self.pos.distance_to(self.collided_pos) <= allowed_collision_offset:
             mouse_dir = self.get_mouse_dir(mouse_pos)
             if mouse_dir[1] < 0:
-                power_to_vel_coefficient = 0.15
+                power_to_vel_coefficient = 0.08
                 gained_vel = min(self.jump_power, self.max_jump_power) * power_to_vel_coefficient
                 self.vel += mouse_dir * gained_vel
         self.jump_power = 0
@@ -149,8 +150,9 @@ class Player(pg.sprite.Sprite):
                 platform.got_hit()
 
     def draw(self, canvas, mouse_pos):
-        self.update_visuals(mouse_pos)
+        # self.update_visuals(mouse_pos)
         canvas.blit(self.image, self.rect)
+        # pg.draw.circle(canvas, 'red', self.pos, self.size[0] / 2)
 
     def update_visuals(self, mouse_pos):
         self.image = self.body_types[self.state].copy()
