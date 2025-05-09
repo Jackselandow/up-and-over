@@ -1,13 +1,15 @@
 import pygame as pg
 import random
+from scaler import Scaler
 pg.init()
 
-win_rect = pg.Rect((0, 0), (640, 360))
+scaler = Scaler()
+base_win_rect = pg.Rect((0, 0), scaler.base_win_size)
 tile_map = {}  # {tile index: tile}
 occupied_tiles = set()  # a set of occupied tile ids
 generated_tile_rows = []
-TILE_SIZE = (8, 8)
-WIN_TSIZE = (int(win_rect.width / TILE_SIZE[0]), int(win_rect.height / TILE_SIZE[1]))  # (50, 40)
+TILE_SIZE = (10, 10)
+WIN_TSIZE = (int(base_win_rect.width / TILE_SIZE[0]), int(base_win_rect.height / TILE_SIZE[1]))  # (72, 54)
 
 
 def handle_rendering(stage, current_height, tiles_group, platforms_group):
@@ -25,14 +27,14 @@ def handle_rendering(stage, current_height, tiles_group, platforms_group):
 
 def render_tiles(tile_rows_needed, tiles_group):
     if len(tiles_group) == 0:
-        highest_generated_tile = Tile((0, -1), [0, win_rect.bottom])
+        highest_generated_tile = Tile((0, -1), [0, base_win_rect.bottom])
         tile_row_id = 0
     else:
         highest_generated_tile = tiles_group.sprites()[-1]
         tile_row_id = generated_tile_rows[-1] + 1
     for _ in range(tile_rows_needed):  # generate a necessary number of tile rows
         tile_row_y = highest_generated_tile.pos[1] - TILE_SIZE[1]
-        for column in range(int(win_rect.width / TILE_SIZE[0])):
+        for column in range(int(base_win_rect.width / TILE_SIZE[0])):
             new_tile = Tile((column, tile_row_id), [column * TILE_SIZE[0], tile_row_y])
             tile_map.update({new_tile.id: new_tile})
             tiles_group.add(new_tile)
@@ -43,7 +45,7 @@ def render_tiles(tile_rows_needed, tiles_group):
 
 def render_platforms(stage, platforms_group):
     if len(platforms_group) == 0:
-        GroundPlatform([win_rect.left, win_rect.bottom - TILE_SIZE[1] * 10], (0, 9), platforms_group)
+        GroundPlatform([base_win_rect.left, base_win_rect.bottom - TILE_SIZE[1] * 10], (0, 9), platforms_group)
     last_platform = platforms_group.sprites()[-1]
     platform_generation_space = WIN_TSIZE[1]  # how many tile rows should fit between the last tile and the highest generated platform
     while generated_tile_rows[-1] - last_platform.tpos[1] >= platform_generation_space:
@@ -60,25 +62,22 @@ def render_platforms(stage, platforms_group):
             if not platform_outline_ids & occupied_tiles:
                 break
         toffset_y = tpos[1] - last_platform.tpos[1]
-        pos = [tpos[0] * TILE_SIZE[0], last_platform.pos[1] - toffset_y * TILE_SIZE[1]]
+        pos = [tpos[0] * TILE_SIZE[0], last_platform.rect.top - toffset_y * TILE_SIZE[1]]
         new_platform = new_platform_class(pos, tpos, platforms_group)
         last_platform = new_platform
 
 
 class Tile(pg.sprite.Sprite):
 
-    def __init__(self, id: tuple, pos: list, size=TILE_SIZE):
+    def __init__(self, id: tuple, pos: list):
         super().__init__()
         self.id = id  # (column number, row number)
         self.pos = pos
-        self.size = size
-        self.rect = pg.Rect(self.pos, self.size)
         # self.content = None
 
     def scroll(self, scroll_value):
         self.pos[1] += scroll_value
-        self.rect.y = round(self.pos[1])
-        if self.rect.top >= win_rect.bottom:
+        if self.pos[1] >= base_win_rect.bottom:
             tile_map.pop(self.id)
             occupied_tiles.discard(self.id)
             if self.id[1] in generated_tile_rows:
@@ -89,6 +88,8 @@ class Tile(pg.sprite.Sprite):
 class Stage:
 
     def __init__(self):
+        self.bg = pg.Surface(scaler.scaled_win_size).convert()
+        self.bg.fill('lightskyblue1')
         beginner_pattern = SpawnPattern('beginner', 50, 80, 0, 31, {DefaultPlatform: 1})
         rocky_pattern = SpawnPattern('rocky', 50, 80, 30, 121, {SolidPlatform: 2, DefaultPlatform: 1})
         bumpy_pattern = SpawnPattern('bumpy', 50, 80, 120, 211, {DefaultPlatform: 3, BumpyPlatform: 1})
@@ -139,13 +140,12 @@ class Platform(pg.sprite.Sprite):
     max_offset_y - max allowed difference between this platform's tpos[1] and the last one's
     """
 
-    def __init__(self, pos: list, tpos: tuple, tsize: tuple, type: str, solid: bool, platforms_group: pg.sprite.Group):
+    def __init__(self, pos, tpos: tuple, tsize: tuple, type: str, solid: bool, platforms_group: pg.sprite.Group):
         super().__init__()
-        self.pos = pos
         self.tpos = tpos  # id of the most top left occupied tile
         self.tsize = tsize  # how many tiles a platform occupies in both dimensions
         self.size = (self.tsize[0] * TILE_SIZE[0], self.tsize[1] * TILE_SIZE[1])
-        self.rect = pg.Rect(self.pos, self.size)
+        self.rect = pg.FRect(pos, self.size)
         self.type = type
         self.solid = solid
         self.image = pg.Surface(self.size).convert_alpha()
@@ -154,13 +154,15 @@ class Platform(pg.sprite.Sprite):
         platforms_group.add(self)
 
     def scroll(self, scroll_value, game_difficulty):
-        self.pos[1] += scroll_value
-        self.rect.y = round(self.pos[1])
+        self.rect.move_ip(0, scroll_value)
         if game_difficulty == 'easy':
             if generated_tile_rows[0] - self.tpos[1] > 100:
                 self.kill()
-        elif self.rect.top >= win_rect.bottom:
+        elif self.rect.top >= base_win_rect.bottom:
             self.kill()
+
+    def draw(self, canvas):
+        canvas.blit(self.image, scaler.scale_pos(self.rect.topleft))
 
     # NOT A RECTANGULAR-SHAPED PLATFORM
     # def __init__(self, occupied_tiles, type):
@@ -183,9 +185,10 @@ class Platform(pg.sprite.Sprite):
 
 class GroundPlatform(Platform):
 
-    def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
+    def __init__(self, pos, tpos: tuple, platforms_group: pg.sprite.Group):
         super().__init__(pos, tpos, (WIN_TSIZE[0], 10), 'solid', False, platforms_group)
         self.image.fill('forestgreen')
+        self.image = scaler.scale_surface(self.image)
 
 
 class DefaultPlatform(Platform):
@@ -195,9 +198,10 @@ class DefaultPlatform(Platform):
     max_offset_y = 12
     tsize = (15, 1)
 
-    def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
+    def __init__(self, pos, tpos: tuple, platforms_group: pg.sprite.Group):
         super().__init__(pos, tpos, self.tsize, 'default', False, platforms_group)
         self.image.fill('white')
+        self.image = scaler.scale_surface(self.image)
 
 
 class SolidPlatform(Platform):
@@ -207,9 +211,10 @@ class SolidPlatform(Platform):
     max_offset_y = 12
     tsize = (12, 2)
 
-    def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
+    def __init__(self, pos, tpos: tuple, platforms_group: pg.sprite.Group):
         super().__init__(pos, tpos, self.tsize, 'solid', True, platforms_group)
         self.image.fill('gray75')
+        self.image = scaler.scale_surface(self.image)
 
 
 class BumpyPlatform(Platform):
@@ -219,9 +224,10 @@ class BumpyPlatform(Platform):
     max_offset_y = 9
     tsize = (4, 4)
 
-    def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
+    def __init__(self, pos, tpos: tuple, platforms_group: pg.sprite.Group):
         super().__init__(pos, tpos, self.tsize, 'bumpy', True, platforms_group)
         self.image.fill('red')
+        self.image = scaler.scale_surface(self.image)
         self.bump_force = 10
 
     def bump_player(self, platform_side: str, player_vel):
@@ -243,9 +249,10 @@ class GhostPlatform(Platform):
     max_offset_y = 12
     tsize = (14, 1)
 
-    def __init__(self, pos: list, tpos: tuple, platforms_group: pg.sprite.Group):
+    def __init__(self, pos, tpos: tuple, platforms_group: pg.sprite.Group):
         super().__init__(pos, tpos, self.tsize, 'ghost', False, platforms_group)
         self.image.fill('white')
+        self.image = scaler.scale_surface(self.image)
         self.durability = 4
         visible_alpha = 50
         self.alpha_decrement_step = (255 - visible_alpha) / self.durability

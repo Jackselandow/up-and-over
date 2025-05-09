@@ -4,11 +4,11 @@ from scaler import Scaler
 pg.init()
 
 screen = pg.display.set_mode((0, 0), pg.FULLSCREEN)
-# screen = pg.display.set_mode((640, 360))
+# screen = pg.display.set_mode((720, 540))
+screen.fill('black')
 screen_size = screen.get_size()
-win_size = (640, 360)
-win = pg.Surface(win_size)
-scaler = Scaler(screen_size, win_size)
+scaler = Scaler()
+scaled_win = pg.Surface(scaler.scaled_win_size)
 pg.display.set_caption('Up & Over')
 pg.display.set_icon(pg.image.load('resources/icon.png'))
 
@@ -30,16 +30,15 @@ def run():
         game.check_scroll_need()
         game.update_objects(mouse_pos)
         game.update_height()
-        win.fill('lightskyblue1')
-        game.draw_objects(win, mouse_pos)
-        scaler.display_win(win, screen)
+        game.draw_objects(scaled_win, mouse_pos)
+        screen.blit(scaled_win, scaler.scaled_win_rect)
         pg.display.update()
 
 
 def debug():
     from game import Game
     game = Game('easy')
-    show_info = True
+    show_info = False
     hitbox_view = False
     while True:
         clock.tick(FPS)
@@ -51,28 +50,26 @@ def debug():
                 exit()
         if key_pressed[pg.K_r]:
             game.state = 'restarting'
-        elif key_pressed[pg.K_q]:
+        elif key_pressed[pg.K_h]:
             hitbox_view = not hitbox_view
+        elif key_pressed[pg.K_i]:
+            show_info = not show_info
         game.handle_state()
         game.check_scroll_need()
         game.update_objects(mouse_pos)
         game.update_height()
-        win.fill('lightskyblue1')
-        game.draw_tiles(win)
         if not hitbox_view:
-            game.draw_objects(win, mouse_pos)
+            game.draw_objects(scaled_win, mouse_pos)
         else:
-            game.draw_hitboxes(win)
-        utilities.debug(f'FPS: {round(clock.get_fps(), 1)}', win, 2)
+            game.draw_hitboxes(scaled_win)
+            game.draw_tiles(scaled_win)
+        utilities.debug(f'FPS: {round(clock.get_fps(), 1)}', scaled_win, 2)
         if show_info:
-            utilities.debug(f'active pattern: {game.stage1.active_spawn_pattern.name}', win, 3)
-            utilities.debug(f'pattern countdown: {game.stage1.pattern_switch_countdown}', win, 4)
-            utilities.debug(f'player vel: {round(game.player.vel)}', win, 5)
-            for tile in game.tiles_group:
-                if tile.rect.collidepoint(mouse_pos):
-                    utilities.debug(f'tile id: {tile.id}', win, 6)
-            utilities.debug(f'mouse pos: {mouse_pos}', win, 7)
-        scaler.display_win(win, screen)
+            utilities.debug(f'active pattern: {game.stage1.active_spawn_pattern.name}', scaled_win, 3)
+            utilities.debug(f'pattern countdown: {game.stage1.pattern_switch_countdown}', scaled_win, 4)
+            utilities.debug(f'player vel: {round(game.player.vel)}', scaled_win, 5)
+            utilities.debug(f'mouse pos: {mouse_pos}', scaled_win, 6)
+        screen.blit(scaled_win, scaler.scaled_win_rect)
         pg.display.update()
 
 
