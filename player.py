@@ -1,26 +1,28 @@
 import pygame as pg
+from scaler import Scaler
 pg.init()
 
-win_rect = pg.Rect((0, 0), (1000, 800))
-DRAG = 0.014
-GRAVITY = 0.4
-FRICTION = 0.2
+scaler = Scaler()
+base_win_rect = pg.Rect((0, 0), scaler.base_win_size)
+DRAG = 0.008
+GRAVITY = 0.24
+FRICTION = 0.3
 
 
 class Player(pg.sprite.Sprite):
 
     def __init__(self):
         super().__init__()
-        self.pos = pg.Vector2(500, 575)  # position of player's center represented as a vector
-        self.size = [50, 50]
+        self.size = [32, 32]
         self.state = 'default'
         self.body_types = {'default': pg.image.load('resources/player/body/default.png').convert_alpha(), 'absorbing': pg.image.load('resources/player/body/absorbing.png').convert_alpha()}
         self.eyeball = pg.image.load('resources/player/eyeball.png').convert_alpha()
         self.energy_filling = pg.image.load('resources/player/energy_filling.png').convert_alpha()
         self.pupil_types = {'default': pg.image.load('resources/player/pupil/default.png').convert_alpha(), 'absorbing': pg.image.load('resources/player/pupil/absorbing.png').convert_alpha()}
-        self.image = self.body_types[self.state].copy()
-        self.rect = pg.Rect((0, 0), self.size)
-        self.rect.center = self.pos
+        # self.image = self.body_types[self.state].copy()
+        self.image = pg.image.load('resources/player/new_shape32.png').convert_alpha()
+        self.image = scaler.scale_surface(self.image)
+        self.rect = pg.FRect((344, 408), self.size)
         self.prerect = self.rect.copy()  # copy of the rect on the last frame
         self.vel = pg.Vector2(0, 0)
         self.max_abs_vel = 25
@@ -30,24 +32,23 @@ class Player(pg.sprite.Sprite):
         self.collided_pos = pg.Vector2(0, 0)  # player's position when the last collision happened
         self.jump_power = 0
         self.max_jump_power = 100
-        self.is_on_platform = True
+        self.is_on_platform = False
 
     def scroll(self, scroll_value):
-        self.pos[1] += scroll_value
-        self.rect.centery = round(self.pos[1])
+        self.prerect.move_ip(0, scroll_value)
+        self.rect.move_ip(0, scroll_value)
 
-    def update(self, platforms_group):
-        self.handle_player_input()
+    def update(self, mouse_pos, platforms_group):
+        self.handle_player_input(mouse_pos)
         self.apply_external_forces()
         self.limit_vel()
-        self.pos += self.vel
         self.prerect = self.rect.copy()
-        self.rect.centerx, self.rect.centery = round(self.pos[0]), round(self.pos[1])
+        self.rect.move_ip(self.vel)
         self.frames_past_collision += 1
         self.check_bounds_collision()
         self.check_platform_collision(platforms_group)
 
-    def handle_player_input(self):
+    def handle_player_input(self, mouse_pos):
         mouse_pressed = pg.mouse.get_pressed()
         key_pressed = pg.key.get_pressed()
         if mouse_pressed[0] or key_pressed[pg.K_SPACE]:
@@ -55,23 +56,23 @@ class Player(pg.sprite.Sprite):
             self.jump_power += 3
         elif self.state == 'absorbing':
             self.state = 'default'
-            self.release_jump()
+            self.release_jump(mouse_pos)
 
-    def get_mouse_dir(self):
-        mouse_pos = pg.Vector2(pg.mouse.get_pos())
-        if mouse_pos != self.pos:
-            mouse_dir = (mouse_pos - self.pos).normalize()
+    def get_mouse_dir(self, mouse_pos):
+        center = pg.Vector2(self.rect.center)
+        if mouse_pos != center:
+            mouse_dir = (mouse_pos - center).normalize()
         else:
             mouse_dir = pg.Vector2(0, 1)
         return mouse_dir
 
-    def release_jump(self):
-        allowed_collision_delay = 12  # after this number of frames since collision, the player can no longer jump off the collided surface
+    def release_jump(self, mouse_pos):
+        allowed_collision_delay = 12  # after this number of frames since a collision, the player can no longer jump off the collided surface
         allowed_collision_offset = 80  # after getting this far from a collided pos, the player can no longer jump off the collided surface
-        if self.frames_past_collision <= allowed_collision_delay and self.pos.distance_to(self.collided_pos) <= allowed_collision_offset:
-            mouse_dir = self.get_mouse_dir()
+        if self.frames_past_collision <= allowed_collision_delay and pg.Vector2(self.rect.topleft).distance_to(self.collided_pos) <= allowed_collision_offset:
+            mouse_dir = self.get_mouse_dir(mouse_pos)
             if mouse_dir[1] < 0:
-                power_to_vel_coefficient = 0.15
+                power_to_vel_coefficient = 0.08
                 gained_vel = min(self.jump_power, self.max_jump_power) * power_to_vel_coefficient
                 self.vel += mouse_dir * gained_vel
         self.jump_power = 0
@@ -94,11 +95,9 @@ class Player(pg.sprite.Sprite):
     def check_bounds_collision(self):
         if self.rect.left < 0:
             self.rect.left = 0
-            self.pos[0] = self.rect.centerx
             self.vel[0] = abs(self.vel[0]) * self.retention
-        elif self.rect.right > win_rect.right:
-            self.rect.right = win_rect.right
-            self.pos[0] = self.rect.centerx
+        elif self.rect.right > base_win_rect.right:
+            self.rect.right = base_win_rect.right
             self.vel[0] = -abs(self.vel[0]) * self.retention
 
     def check_platform_collision(self, platforms_group):
@@ -124,7 +123,7 @@ class Player(pg.sprite.Sprite):
 
     def bounce_off_platform(self, platform, platform_side: str):
         self.frames_past_collision = 0
-        self.collided_pos = self.pos.copy()
+        self.collided_pos = self.rect.topleft
         match platform_side:
             case 'top':
                 self.rect.bottom = platform.rect.top
@@ -142,21 +141,20 @@ class Player(pg.sprite.Sprite):
             case 'right':
                 self.rect.left = platform.rect.right
                 self.vel[0] = abs(self.vel[0]) * self.retention
-        self.pos.update(self.rect.center)
         if platform.type == 'bumpy':
             platform.bump_player(platform_side, self.vel)
         elif platform.type == 'ghost':
             if self.is_on_platform is True:
                 platform.got_hit()
 
-    def draw(self, surface):
-        self.update_visuals()
-        surface.blit(self.image, self.rect)
+    def draw(self, canvas, mouse_pos):
+        # self.update_visuals(mouse_pos)
+        canvas.blit(self.image, scaler.scale_pos(self.rect.topleft))
 
-    def update_visuals(self):
+    def update_visuals(self, mouse_pos):
         self.image = self.body_types[self.state].copy()
         self.update_energy_filling()
-        self.update_pupil()
+        self.update_pupil(mouse_pos)
 
     def update_energy_filling(self):
         eyeball = self.eyeball.copy()
@@ -166,10 +164,10 @@ class Player(pg.sprite.Sprite):
         eyeball.blit(energy_filling, (0, eyeball_size[1] - eyeball_size[1] * relative_fullness), (0, eyeball_size[1] - eyeball_size[1] * relative_fullness, eyeball_size[0], eyeball_size[1] * relative_fullness))
         self.image.blit(eyeball, (5, 5))
 
-    def update_pupil(self):
-        mouse_pos = pg.Vector2(pg.mouse.get_pos())
-        if mouse_pos != self.pos:
-            vector_to_cursor = mouse_pos - self.pos
+    def update_pupil(self, mouse_pos):
+        center = pg.Vector2(self.rect.center)
+        if mouse_pos != center:
+            vector_to_cursor = mouse_pos - center
             pupil_offset = vector_to_cursor / 5
             pupil_offset.clamp_magnitude_ip(10)
         else:

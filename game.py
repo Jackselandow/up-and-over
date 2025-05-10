@@ -1,45 +1,47 @@
 import pygame as pg
+from scaler import Scaler
 import generator
 from player import Player
 import ui
 pg.init()
 
-win_rect = pg.Rect((0, 0), (1000, 800))
-TILE_SIZE = (20, 20)
-HUNIT = 50  # how many pixels a single height unit occupies
+scaler = Scaler()
+base_win_rect = pg.Rect((0, 0), scaler.base_win_size)
+TILE_SIZE = (10, 10)
+HUNIT = 30  # how many pixels a single height unit occupies
 
 
 class Game:
     state = 'booting up'
     stage1 = generator.Stage()
+    bg = stage1.bg
     tiles_group = pg.sprite.Group()
     platforms_group = pg.sprite.Group()
     player = Player()
 
-    black_screen = pg.Surface(win_rect.size).convert_alpha()
+    black_screen = pg.Surface(scaler.scaled_win_size).convert_alpha()
     black_screen.fill('black')
-    ground_y = win_rect.bottom - 200
+    ground_y = base_win_rect.bottom - TILE_SIZE[1] * 10
     current_height = 0
     reached_height = 0  # best height of the current attempt
     best_height = 0  # best height of all attempts
-    height_label = ui.Label('Height: 0', 'Consolas', 30, 'black', None, 'topleft', (win_rect.left + 10, win_rect.top + 10))
-    best_height_line = ui.Element([0, win_rect.bottom], (win_rect.width, 3), 'deepskyblue4')
-    best_height_label = ui.Label('YOUR BEST', 'Consolas', 15, 'deepskyblue4', None, 'bottomleft', (5, best_height_line.pos[1] - 3))
+    height_label = ui.Label('Height: 0', 'Consolas', 26, 'black', None, 'topleft', (base_win_rect.left + 14, base_win_rect.top + 14))
+    best_height_line = ui.Element([0, base_win_rect.bottom], (base_win_rect.width, 1), 'deepskyblue4')
+    best_height_label = ui.Label('YOUR BEST', 'Consolas', 10, 'deepskyblue4', None, 'bottomleft', (3, best_height_line.rect.top))
     screen_offset_y = 0  # offset > 0 => screen should be scrolled upward; offset < 0 => screen should be scrolled downward
     scroll_speed = 0
 
     def __init__(self, difficulty):
         self.difficulty = difficulty
 
-    def handle_state(self, surface):
-        if self.state == 'running' and self.player.rect.top > win_rect.bottom:
+    def handle_state(self):
+        if self.state == 'running' and self.player.rect.top > base_win_rect.bottom:
             self.state = 'restarting'
         if self.state == 'restarting':
             black_screen_alpha = self.black_screen.get_alpha()
             if black_screen_alpha < 255:
                 black_screen_alpha += 10
                 self.black_screen.set_alpha(black_screen_alpha)
-                surface.blit(self.black_screen, (0, 0))
             else:
                 self.state = 'booting up'
                 self.restart()
@@ -48,13 +50,12 @@ class Game:
             if black_screen_alpha > 0:
                 black_screen_alpha -= 5
                 self.black_screen.set_alpha(black_screen_alpha)
-                surface.blit(self.black_screen, (0, 0))
             else:
                 self.state = 'running'
 
-    def update_objects(self):
+    def update_objects(self, mouse_pos):
         if self.state == 'running':
-            self.player.update(self.platforms_group)
+            self.player.update(mouse_pos, self.platforms_group)
 
     def update_height(self):
         self.current_height = int((self.ground_y - self.player.rect.top) / HUNIT)
@@ -65,29 +66,29 @@ class Game:
             if self.current_height > self.best_height:
                 self.best_height = self.current_height
 
-    def draw_objects(self, surface):
-        self.best_height_line.draw(surface)
-        self.best_height_label.draw(surface)
-        self.platforms_group.draw(surface)
-        self.player.draw(surface)
-        self.height_label.draw(surface)
-
-    def draw_tiles(self, surface, grid_type=1):
-        if grid_type == 1:
-            for tile in self.tiles_group:
-                pg.draw.circle(surface, 'gray70', tile.rect.topleft, 1)
-                if tile.id in generator.occupied_tiles:
-                    pg.draw.rect(surface, 'red', tile.rect)
-        if grid_type == 2:
-            for col_num in range(int(win_rect.width / TILE_SIZE[0]) + 1):
-                pg.draw.line(surface, 'gray70', (TILE_SIZE[0] * col_num, 0), (TILE_SIZE[0] * col_num, win_rect.bottom))
-            for line_num in range(int(win_rect.height / TILE_SIZE[1]) + 1):
-                pg.draw.line(surface, 'gray70', (0, TILE_SIZE[1] * line_num), (win_rect.right, TILE_SIZE[1] * line_num))
-
-    def draw_hitboxes(self, surface):
-        pg.draw.rect(surface, 'blue', self.player.rect)
+    def draw_objects(self, canvas, mouse_pos):
+        canvas.blit(self.bg, (0, 0))
+        self.best_height_line.draw(canvas)
+        self.best_height_label.draw(canvas)
         for platform in self.platforms_group:
-            pg.draw.rect(surface, 'red', platform.rect)
+            platform.draw(canvas)
+        self.player.draw(canvas, mouse_pos)
+        self.height_label.draw(canvas)
+        canvas.blit(self.black_screen, (0, 0))
+
+    def draw_tiles(self, canvas):
+        for tile in self.tiles_group:
+            if tile.id in generator.occupied_tiles:
+                pg.draw.circle(canvas, 'red', scaler.scale_pos(tile.pos), 2)
+            else:
+                pg.draw.circle(canvas, 'gray70', scaler.scale_pos(tile.pos), 2)
+
+    def draw_hitboxes(self, canvas):
+        canvas.blit(self.bg, (0, 0))
+        pg.draw.rect(canvas, 'blue', scaler.scale_rect(self.player.rect))
+        for platform in self.platforms_group:
+            pg.draw.rect(canvas, 'yellow', scaler.scale_rect(platform.rect))
+        canvas.blit(self.black_screen, (0, 0))
 
     def check_scroll_need(self):
         self.detect_screen_offset()
@@ -108,12 +109,12 @@ class Game:
             screen_offset_offers.append(top_lim_offset + 100)
         if self.difficulty == 'easy' and self.reached_height - self.current_height < 50:
             # check if the player is about to fall
-            bottom_lim_offset = win_rect.bottom - 200 - self.player.rect.bottom
+            bottom_lim_offset = base_win_rect.bottom - TILE_SIZE[1] * 10 - self.player.rect.bottom
             if bottom_lim_offset < 0:
                 self.screen_offset_y = bottom_lim_offset
         # check if the player has landed on a platform
         if self.player.is_on_platform is True:
-            screen_offset_offers.append(win_rect.bottom - (self.player.rect.bottom + 200))
+            screen_offset_offers.append(base_win_rect.bottom - (self.player.rect.bottom + TILE_SIZE[1] * 10))
 
         if len(screen_offset_offers) > 0 and max(screen_offset_offers) > self.screen_offset_y:
             self.screen_offset_y = max(screen_offset_offers)
@@ -138,9 +139,9 @@ class Game:
         generator.generated_tile_rows.clear()
         self.platforms_group.empty()
         self.player.__init__()
-        self.ground_y = win_rect.bottom - 200
+        self.ground_y = base_win_rect.bottom - TILE_SIZE[1] * 10
         self.current_height = 0
         self.reached_height = 0
         self.best_height_line.update_pos([0, self.ground_y - HUNIT * self.best_height])
-        self.best_height_label.update_pos('bottomleft', (5, self.best_height_line.pos[1] - 3))
+        self.best_height_label.update_pos('bottomleft', (3, self.best_height_line.rect.top))
         self.screen_offset_y = 0
