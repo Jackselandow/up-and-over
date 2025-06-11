@@ -6,14 +6,14 @@ scaler = Scaler()
 base_win_rect = pg.Rect((0, 0), scaler.base_win_size)
 DRAG = 0.008
 GRAVITY = 0.24
-FRICTION = 0.3
+FRICTION = 0.1
 
 
 class Player(pg.sprite.Sprite):
 
     def __init__(self):
         super().__init__()
-        self.size = [32, 32]
+        self.init_size = [32, 32]
         self.state = 'default'
         self.body_types = {'default': pg.image.load('resources/player/body/default.png').convert_alpha(), 'absorbing': pg.image.load('resources/player/body/absorbing.png').convert_alpha()}
         self.eyeball = pg.image.load('resources/player/eyeball.png').convert_alpha()
@@ -22,12 +22,14 @@ class Player(pg.sprite.Sprite):
         # self.image = self.body_types[self.state].copy()
         self.image = pg.image.load('resources/player/new_shape32.png').convert_alpha()
         self.image = scaler.scale_surface(self.image)
-        self.rect = pg.FRect((344, 408), self.size)
+        self.rect = pg.FRect((344, 208), self.init_size)
         self.prerect = self.rect.copy()  # copy of the rect on the last frame
         self.vel = pg.Vector2(0, 0)
-        self.max_abs_vel = 25
-        self.retention = 0.9  # determines how many percent of the initial velocity will be saved after a bounce
+        self.max_speed = 25
+        self.retention = 0.8  # determines how many percent of the initial velocity will be saved after a bounce
         self.bounce_lim = 3  # lowest vertical speed limit that prevents the player from bouncing upon reaching
+        self.stored_vel = pg.Vector2(0, 0)  # stored velocity during compression which applies after a bounce
+        self.max_compress = 16
         self.frames_past_collision = 0
         self.collided_pos = pg.Vector2(0, 0)  # player's position when the last collision happened
         self.jump_power = 0
@@ -47,6 +49,7 @@ class Player(pg.sprite.Sprite):
         self.frames_past_collision += 1
         self.check_bounds_collision()
         self.check_platform_collision(platforms_group)
+        self.inflate()
 
     def handle_player_input(self, mouse_pos):
         mouse_pressed = pg.mouse.get_pressed()
@@ -87,10 +90,10 @@ class Player(pg.sprite.Sprite):
         self.vel[1] += GRAVITY
 
     def limit_vel(self):
-        if abs(self.vel[0]) > self.max_abs_vel:
-            self.vel[0] = max(min(self.vel[0], self.max_abs_vel), -self.max_abs_vel)
-        if abs(self.vel[1]) > self.max_abs_vel:
-            self.vel[1] = max(min(self.vel[1], self.max_abs_vel), -self.max_abs_vel)
+        if abs(self.vel[0]) > self.max_speed:
+            self.vel[0] = max(min(self.vel[0], self.max_speed), -self.max_speed)
+        if abs(self.vel[1]) > self.max_speed:
+            self.vel[1] = max(min(self.vel[1], self.max_speed), -self.max_speed)
 
     def check_bounds_collision(self):
         if self.rect.left < 0:
@@ -105,18 +108,19 @@ class Player(pg.sprite.Sprite):
         hit_platforms = pg.sprite.spritecollide(self, platforms_group, False)
         for hit_platform in hit_platforms:
             collided_side = None
+            tolerance = 0.001  # to account for computational errors with floats (e.g., 0.1 + 0.2 = 0.3000004)
             # check platform's top side collision
-            if self.vel[1] > 0 and self.prerect.bottom <= hit_platform.rect.top:
+            if self.vel[1] > 0 and self.prerect.bottom <= hit_platform.rect.top + tolerance:
                 collided_side = 'top'
             if hit_platform.solid is True:
                 # check platform's bottom side collision
-                if self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom:
+                if self.vel[1] < 0 and self.prerect.top >= hit_platform.rect.bottom - tolerance:
                     collided_side = 'bottom'
                 # check platform's left side collision
-                if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left:
+                if self.vel[0] > 0 and self.prerect.right <= hit_platform.rect.left + tolerance:
                     collided_side = 'left'
                 # check platform's right side collision
-                elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right:
+                elif self.vel[0] < 0 and self.prerect.left >= hit_platform.rect.right - tolerance:
                     collided_side = 'right'
             if collided_side:
                 self.bounce_off_platform(hit_platform, collided_side)
@@ -126,11 +130,13 @@ class Player(pg.sprite.Sprite):
         self.collided_pos = self.rect.topleft
         match platform_side:
             case 'top':
-                self.rect.bottom = platform.rect.top
-                if self.vel[1] > self.bounce_lim:
-                    self.vel[1] = -abs(self.vel[1]) * self.retention
+                if abs(self.vel[1]) > self.bounce_lim:
+                    self.compress()
+                elif self.stored_vel[1] < 0:
+                    self.vel[1] = -self.vel[1]
                 else:
                     self.vel[1] = 0
+                self.rect.bottom = platform.rect.top
                 self.is_on_platform = True
             case 'bottom':
                 self.rect.top = platform.rect.bottom
@@ -146,6 +152,28 @@ class Player(pg.sprite.Sprite):
         elif platform.type == 'ghost':
             if self.is_on_platform is True:
                 platform.got_hit()
+
+    def compress(self):
+        entry_vel = self.vel[1]
+        self.vel[1] *= 0.8  # closer to max compress = stronger vel decrease
+        lost_vel = entry_vel - self.vel[1]
+        self.stored_vel[1] += -abs(lost_vel) * self.retention
+        base_compression = 3  # number of pixels of compression per 1 lost vel unit when the player is completely inflated
+        stiffness = (self.init_size[1] - self.rect.height) / self.max_compress  # player's relative compression level
+        self.rect.height -= base_compression * (1 - stiffness) * abs(lost_vel)
+        self.rect.height = max(self.rect.height, self.init_size[1] - self.max_compress)
+
+    def inflate(self):
+        if self.stored_vel[1] < 0 and self.vel[1] < 0:
+            height_diff = self.init_size[1] - self.rect.height
+            if height_diff > 0:
+                current_compression = height_diff / self.max_compress
+                height_gain = min(pg.math.lerp(0.5, 2, current_compression), height_diff)
+                self.rect.y -= height_gain
+                self.rect.height += height_gain
+                speed_gain = self.stored_vel[1] * (height_gain / height_diff)
+                self.vel[1] += speed_gain
+                self.stored_vel[1] -= speed_gain
 
     def draw(self, canvas, mouse_pos):
         # self.update_visuals(mouse_pos)

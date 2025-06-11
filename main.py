@@ -39,29 +39,30 @@ def debug():
     from game import Game
     game = Game('easy')
     show_info = False
-    hitbox_view = False
+    hitbox_view = True
     while True:
         clock.tick(FPS)
         mouse_pos = scaler.get_virtual_mouse_pos()
-        key_pressed = pg.key.get_pressed()
         events = pg.event.get()
         for event in events:
             if event.type == pg.QUIT:
                 exit()
-        if key_pressed[pg.K_r]:
-            game.state = 'restarting'
-        elif key_pressed[pg.K_h]:
-            hitbox_view = not hitbox_view
-        elif key_pressed[pg.K_i]:
-            show_info = not show_info
+            if event.type == pg.KEYUP:
+                if event.key == pg.K_r:
+                    game.state = 'restarting'
+                elif event.key == pg.K_h:
+                    hitbox_view = not hitbox_view
+                elif event.key == pg.K_i:
+                    show_info = not show_info
         game.handle_state()
-        game.check_scroll_need()
+        # game.check_scroll_need()
         game.update_objects(mouse_pos)
         game.update_height()
         if not hitbox_view:
             game.draw_objects(scaled_win, mouse_pos)
         else:
             game.draw_hitboxes(scaled_win)
+            pg.draw.line(scaled_win, 'red', scaler.scale_pos(game.player.rect.center), scaler.scale_pos(game.player.rect.center + game.player.vel * 5), 3)
             game.draw_tiles(scaled_win)
         utilities.debug(f'FPS: {round(clock.get_fps(), 1)}', scaled_win, 2)
         if show_info:
@@ -69,9 +70,11 @@ def debug():
             utilities.debug(f'pattern countdown: {game.stage1.pattern_switch_countdown}', scaled_win, 4)
             utilities.debug(f'player vel: {round(game.player.vel)}', scaled_win, 5)
             utilities.debug(f'mouse pos: {mouse_pos}', scaled_win, 6)
+            utilities.debug(f'height: {round(game.player.rect.height, 2)}', scaled_win, 7)
+            utilities.debug(f'bounce vel: {round(game.player.bounce_vel, 2)}', scaled_win, 8)
         screen.blit(scaled_win, scaler.scaled_win_rect)
         pg.display.update()
 
 
 if __name__ == "__main__":
-    run()
+    debug()
